@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#080d13">
+
+    <title>ORBITAL — ISS Mission Control</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <link rel="stylesheet"
+          href="https://cesium.com/downloads/cesiumjs/releases/1.126/Build/Cesium/Widgets/widgets.css">
+
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.126/Build/Cesium/Cesium.js"></script>
+</head>
+
+<body>
+<div class="command-interface">
+
+    <header class="topbar">
+        <a class="brand" href="#" aria-label="ORBITAL home">
+            <span class="brand-mark"><span></span></span>
+            <span class="brand-copy">
+                <span class="brand-name">ORBITAL</span>
+                <span class="brand-sub">SPACE SYSTEMS / DIGITAL TWIN</span>
+            </span>
+        </a>
+
+        <div class="mission-info">
+            <span class="eyebrow">ACTIVE VEHICLE</span>
+            <strong>ISS ZARYA</strong>
+            <span class="mission-divider"></span>
+            <span class="mono">NORAD 25544</span>
+        </div>
+
+        <div class="system-status">
+            <span class="status-indicator"></span>
+            <span class="status-label">SIMULATION RUNNING</span>
+            <strong id="utc-clock">00:00:00 UTC</strong>
+        </div>
+    </header>
+
+    <main class="workspace">
+        <div id="cesiumContainer" aria-label="Three-dimensional Earth and ISS orbit visualization"></div>
+
+        <div class="scene-vignette" aria-hidden="true"></div>
+        <div class="scene-caption">
+            <span class="scene-caption-kicker">LIVE ORBITAL VIEW</span>
+            <span class="scene-caption-main">LOW EARTH ORBIT</span>
+        </div>
+
+        <section class="telemetry-panel left-panel" aria-labelledby="orbital-heading">
+            <div class="panel-heading">
+                <div>
+                    <span class="section-index">01 / FLIGHT DATA</span>
+                    <h2 id="orbital-heading">Orbital state</h2>
+                </div>
+                <span class="panel-live"><i></i> TRACKING</span>
+            </div>
+
+            <div class="flight-state">
+                <span class="state-kicker">PROPAGATION STATUS</span>
+                <div class="state-value">
+                    <span class="state-dot"></span>
+                    <span>Predicted state</span>
+                </div>
+                <p>Position propagated from the current orbital solution.</p>
+            </div>
+
+            <div class="primary-readout">
+                <div class="readout-label">Altitude above Earth</div>
+                <div class="readout-value"><strong id="altitude">408.2</strong><span>km</span></div>
+            </div>
+
+            <div class="telemetry-list">
+                <div class="telemetry-row">
+                    <span>Velocity</span>
+                    <strong id="velocity">7.660 km/s</strong>
+                </div>
+                <div class="telemetry-row">
+                    <span>Latitude</span>
+                    <strong id="latitude">00.00°</strong>
+                </div>
+                <div class="telemetry-row">
+                    <span>Longitude</span>
+                    <strong id="longitude">00.00°</strong>
+                </div>
+            </div>
+
+            <div class="panel-footnote">
+                <span class="footnote-mark"></span>
+                <span>Values update with the simulation</span>
+            </div>
+        </section>
+
+        <section class="telemetry-panel right-panel" aria-labelledby="vehicle-heading">
+            <div class="panel-heading">
+                <div>
+                    <span class="section-index">02 / VEHICLE</span>
+                    <h2 id="vehicle-heading">Mission profile</h2>
+                </div>
+                <span class="vehicle-code">ISS</span>
+            </div>
+
+            <div class="vehicle-identity">
+                <div class="vehicle-symbol" aria-hidden="true">
+                    <span class="vehicle-core"></span>
+                    <span class="vehicle-wing vehicle-wing-left"></span>
+                    <span class="vehicle-wing vehicle-wing-right"></span>
+                </div>
+                <div>
+                    <strong>International Space Station</strong>
+                    <span>ISS Zarya · NORAD 25544</span>
+                </div>
+            </div>
+
+            <div class="profile-list">
+                <div class="mini-metric">
+                    <span>Coordinate frame</span>
+                    <strong>TEME</strong>
+                </div>
+                <div class="mini-metric">
+                    <span>Propagator</span>
+                    <strong>SGP4</strong>
+                </div>
+                <div class="mini-metric">
+                    <span>Update interval</span>
+                    <strong>1.0 sec</strong>
+                </div>
+                <div class="mini-metric">
+                    <span>Data source</span>
+                    <strong>Simulator</strong>
+                </div>
+            </div>
+
+            <!-- Kept for compatibility with dashboard.js if it still updates this value. -->
+            <span id="confidence" class="compatibility-field" aria-hidden="true">—</span>
+        </section>
+
+        <section class="bottom-console" aria-labelledby="telemetry-heading">
+            <div class="console-topline">
+                <div>
+                    <span class="section-index">03 / TELEMETRY</span>
+                    <h2 id="telemetry-heading">Position vector &amp; orbital elements</h2>
+                </div>
+                <span class="stream-source"><i></i> SIMULATED DATA STREAM</span>
+            </div>
+
+            <div class="console-metrics">
+                <div class="console-metric">
+                    <span class="metric-name">POSITION X</span>
+                    <div><strong id="pos-x">0.00</strong><small>km</small></div>
+                </div>
+                <div class="console-metric">
+                    <span class="metric-name">POSITION Y</span>
+                    <div><strong id="pos-y">0.00</strong><small>km</small></div>
+                </div>
+                <div class="console-metric">
+                    <span class="metric-name">POSITION Z</span>
+                    <div><strong id="pos-z">0.00</strong><small>km</small></div>
+                </div>
+                <div class="console-metric">
+                    <span class="metric-name">ORBIT PERIOD</span>
+                    <div><strong>92.4</strong><small>min</small></div>
+                </div>
+                <div class="console-metric">
+                    <span class="metric-name">ECCENTRICITY</span>
+                    <div><strong>0.0006</strong><small>e</small></div>
+                </div>
+                <div class="console-metric">
+                    <span class="metric-name">INCLINATION</span>
+                    <div><strong>51.64</strong><small>deg</small></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="event-stream" aria-labelledby="events-heading">
+            <div class="stream-header">
+                <div>
+                    <span class="section-index">04 / SYSTEM LOG</span>
+                    <h2 id="events-heading">Mission activity</h2>
+                </div>
+                <span class="stream-live"><i></i> LIVE</span>
+            </div>
+
+            <div id="events">
+                <div class="event">
+                    <time>NOW</time>
+                    <span>Orbital state propagated</span>
+                </div>
+                <div class="event">
+                    <time>--:--</time>
+                    <span>Awaiting measurement update</span>
+                </div>
+                <div class="event">
+                    <time>--:--</time>
+                    <span>Digital twin initialized</span>
+                </div>
+            </div>
+        </section>
+
+        <div class="workspace-footer">
+            <span>ORBITAL / FLIGHT DYNAMICS</span>
+            <span>EARTH-CENTERED INERTIAL VISUALIZATION</span>
+        </div>
+    </main>
+</div>
+
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>
