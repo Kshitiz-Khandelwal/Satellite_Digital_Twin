@@ -436,11 +436,50 @@ viewer.camera.flyTo({
 
 
 // --------------------------------------------------------------------------
-// 8. WEBSOCKET REAL-TIME TELEMETRY INTEGRATION
+// 8. WEBSOCKET REAL-TIME TELEMETRY INTEGRATION (WITH SERVERLESS POLLING FALLBACK)
 // --------------------------------------------------------------------------
 let ws = null;
 let reconnectTimer = null;
+let wsFailCount = 0;
+let useHttpPolling = false;
+let pollingTimer = null;
 let recentPositionsHistory = [];
+
+function startHttpPolling() {
+    if (useHttpPolling) return;
+    useHttpPolling = true;
+    console.info("[Digital Twin] Serverless/Vercel mode: Fallback to 1 Hz HTTP telemetry stream");
+    const badge = $("stream-connection-badge");
+    if (badge) {
+        badge.innerHTML = "<i></i> HTTP DOWNLINK (1 Hz)";
+        badge.style.color = "var(--green)";
+    }
+    addEvent("HTTP 1 Hz Telemetry polling active");
+
+    async function poll() {
+        try {
+            const res = await fetch("/api/telemetry/snapshot");
+            if (res.ok) {
+                const data = await res.json();
+                handleTelemetryPacket(data);
+            }
+        } catch (err) {
+            console.warn("[Digital Twin] Telemetry poll failed:", err);
+        }
+        if (useHttpPolling) {
+            pollingTimer = setTimeout(poll, 1000);
+        }
+    }
+    poll();
+}
+
+function stopHttpPolling() {
+    useHttpPolling = false;
+    if (pollingTimer) {
+        clearTimeout(pollingTimer);
+        pollingTimer = null;
+    }
+}
 
 function connectWebSocket() {
     if (ws) {
@@ -450,10 +489,17 @@ function connectWebSocket() {
     const wsUrl = `${protocol}//${window.location.host}/ws/telemetry`;
     console.info("[Digital Twin] Connecting to WebSocket:", wsUrl);
 
-    ws = new WebSocket(wsUrl);
+    try {
+        ws = new WebSocket(wsUrl);
+    } catch (e) {
+        startHttpPolling();
+        return;
+    }
 
     ws.onopen = () => {
         console.info("[Digital Twin] WebSocket connected successfully!");
+        wsFailCount = 0;
+        stopHttpPolling();
         const badge = $("stream-connection-badge");
         if (badge) {
             badge.innerHTML = "<i></i> WEBSOCKET CONNECTED";
@@ -473,17 +519,27 @@ function connectWebSocket() {
     };
 
     ws.onclose = () => {
-        console.warn("[Digital Twin] WebSocket disconnected. Reconnecting...");
-        const badge = $("stream-connection-badge");
-        if (badge) {
-            badge.innerHTML = "<i></i> RECONNECTING...";
-            badge.style.color = "var(--amber)";
+        wsFailCount += 1;
+        if (wsFailCount >= 2) {
+            // Serverless platform (like Vercel) does not support persistent WebSockets
+            startHttpPolling();
+        } else {
+            console.warn("[Digital Twin] WebSocket disconnected. Reconnecting...");
+            const badge = $("stream-connection-badge");
+            if (badge && !useHttpPolling) {
+                badge.innerHTML = "<i></i> RECONNECTING...";
+                badge.style.color = "var(--amber)";
+            }
+            reconnectTimer = setTimeout(connectWebSocket, 2000);
         }
-        reconnectTimer = setTimeout(connectWebSocket, 2000);
     };
 
     ws.onerror = (err) => {
         console.error("[Digital Twin] WebSocket error:", err);
+        wsFailCount += 1;
+        if (wsFailCount >= 2) {
+            startHttpPolling();
+        }
     };
 }
 connectWebSocket();
