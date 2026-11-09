@@ -125,36 +125,78 @@ The frontend provides the user interface and 3D visualization.
 
 ### Architecture Flow
 
-```text
-             SATELLITE DATA
-                   |
-          +--------+--------+
-          |                 |
-       CelesTrak         Simulator
-          |                 |
-          +--------+--------+
-                   |
-             BACKEND
-               Python
-                   |
-          Satellite Models
-                   |
-          SGP4 Propagation
-                   |
-        Coordinate Processing
-                   |
-             FastAPI
-                   |
-            FRONTEND
-                   |
-              CesiumJS
-                   |
-          3D EARTH GLOBE
-                   |
-         SATELLITE DASHBOARD
+```mermaid
+flowchart TD
+    subgraph INGESTION["1. Telemetry Ingestion & Hygiene"]
+        A1[CelesTrak OMM Ephemeris] --> SGP4[SGP4 Analytic Propagator]
+        A2[Ground Station / GPS Downlink] --> HYG[Data Hygiene Gate]
+        HYG -->|Monotonic Timestamp & Range Check| MAD{MAD 3.5σ Outlier Filter}
+        MAD -->|Anomaly Flagged / Reject| LKG[Last-Known-Good Cache]
+        MAD -->|Clean Telemetry Validated| FUSION[Measurement Vector z_k]
+    end
+
+    subgraph TWIN_CORE["2. Physics-Informed Digital Twin Core"]
+        SGP4 -->|Kinematic Prior| EKF_PRED[EKF RK4 State Propagation]
+        FUSION -->|Innovation Gating d_M < 4.03| EKF_UPD[Joseph Stabilized Covariance Update]
+        EKF_PRED --> EKF_UPD
+        EKF_UPD --> STATE_VEC["State x_k = [r, v]^T\nCovariance P_k (6x6)"]
+        STATE_VEC --> CONF["Uncertainty Radius (3σ_pos)\nConfidence Score %"]
+    end
+
+    subgraph SUBSYSTEMS["3. Coupled Subsystem Health Models"]
+        STATE_VEC --> ECLIPSE[Conical Earth Shadow Geometry]
+        ECLIPSE -->|Illumination Fraction η| EPS[EPS: Solar Array Gen & Battery SoC]
+        ECLIPSE -->|Radiative Heat Balance| TCS[TCS: Multi-Node Thermal Model]
+        STATE_VEC --> ADCS[ADCS: Pointing Stability & Nadir Error]
+        STATE_VEC --> COMMS[Comms: Slant Range & Link Latency]
+    end
+
+    subgraph STATE_MACHINE["4. Twin Lifecycle State Machine"]
+        FUSION -.->|Packet Arrival Rate| FSM{FSM State Evaluator}
+        CONF -.->|Uncertainty Drift| FSM
+        FSM --> LIVE[● LIVE: Nominal Fusion]
+        FSM --> DELAYED[▲ DELAYED: Latency > 1.5s]
+        FSM --> STALE[■ STALE: Age > 3.0s]
+        FSM --> PREDICTED[⚡ PREDICTED: Autonomous Dead-Reckoning]
+        FSM --> RECOVERED[↺ RECOVERED: Filter Re-Convergence]
+    end
+
+    subgraph HMI["5. Mission Control Glass Cockpit"]
+        STATE_VEC --> WS[FastAPI 1 Hz WebSocket Broadcast]
+        SUBSYSTEMS --> WS
+        FSM --> WS
+        WS --> CESIUM["CesiumJS 3D Earth Globe\n- Satellite Position\n- 3D Covariance Ellipsoid\n- Naive Ghost Comparison Tracker"]
+        WS --> TELEMETRY_PANEL[Subsystem Telemetry Gauges]
+        WS --> FAULT_SANDBOX[Interactive Fault Injection Console]
+    end
 ```
 
-**Note:** The backend processing modules and frontend visualization are currently separate development components. Full integration of backend SGP4 output with frontend satellite positions is a planned milestone.
+### Core Subsystems and Mathematical Formulations
+
+#### 1. Extended Kalman Filter (EKF) Orbit Estimation
+- **State Vector**: $\mathbf{x} = [x, y, z, v_x, v_y, v_z]^T \in \mathbb{R}^6$ in ECEF coordinates.
+- **Continuous Two-Body Dynamics**:
+  $$\dot{\mathbf{x}} = f(\mathbf{x}) = \begin{bmatrix} \mathbf{v} \\ -\frac{\mu}{\|\mathbf{r}\|^3}\mathbf{r} \end{bmatrix}$$
+- **Numerical Integration**: 4th-Order Runge-Kutta (RK4) integration with dynamic time-stepping:
+  $$\mathbf{x}_{k|k-1} = \mathbf{x}_{k-1} + \frac{\Delta t}{6} (k_1 + 2k_2 + 2k_3 + k_4)$$
+- **State Transition Jacobian**: $F = \frac{\partial f}{\partial \mathbf{x}}$ computed via gravity gradient tensor:
+  $$G = -\frac{\mu}{r^3} I_3 + \frac{3\mu}{r^5} (\mathbf{r}\mathbf{r}^T), \quad F_k \approx I_6 + \begin{bmatrix} 0 & I_3 \\ G & 0 \end{bmatrix}\Delta t$$
+- **Joseph Stabilized Covariance Update**:
+  $$P_{k|k} = (I - K_k H) P_{k|k-1} (I - K_k H)^T + K_k R K_k^T$$
+  Guarantees positive semi-definiteness and eliminates matrix inversion numerical singularities.
+
+#### 2. Conical Eclipse & Subsystem Health Physics
+- **Conical Earth Shadow Model**: Calculates solar illumination fraction $\eta \in [0.0, 1.0]$, umbra, penumbra, and beta angle ($\beta$).
+- **Electrical Power System (EPS)**:
+  $$P_{gen} = P_{max} \cdot \eta \cdot \cos(\theta_{sun}), \quad \frac{d(SoC)}{dt} = \frac{P_{gen} - P_{bus}}{E_{capacity}}$$
+- **Thermal Control System (TCS)**: Multi-node radiative heat balance:
+  $$Q_{in} = \alpha A_s S_0 \eta + Q_{albedo} + Q_{earth\_ir}, \quad Q_{out} = \epsilon \sigma A_r T^4, \quad C_{thermal} \frac{dT}{dt} = Q_{in} - Q_{out}$$
+
+#### 3. Fault Injection & Naive Tracker Comparison Sandbox
+The dashboard includes an interactive testbed allowing mission operators and evaluators to inject anomalies in real-time:
+- **Feed Severance (`feed_cut`)**: Tests telemetry drops. Watch the state transition to `PREDICTED` while the 3D Covariance Ellipsoid dynamically expands as uncertainty compounds, while a naive tracker completely freezes (`SIGNAL_LOST_FROZEN`).
+- **High Latency Injection (`packet_latency_s`)**: Simulates deep-space or congested relay delays, testing state machine transition to `DELAYED`.
+- **Sensor Noise / Outlier Spikes (`sensor_noise_km`)**: Evaluates the $3.5\times$ MAD hygiene gate and $\chi^2$ innovation gate ($d_M^2 > 16.27$) in rejecting sensor corruption.
 
 ---
 

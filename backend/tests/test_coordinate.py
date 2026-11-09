@@ -1,5 +1,5 @@
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pytest
@@ -9,7 +9,7 @@ from app.twin.coordinate import CoordinateConverter
 
 def test_teme_to_ecef():
 
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
 
     position = np.array([4200.0, 3100.0, 4800.0])
     velocity = np.array([-5.0, 4.0, 3.0])

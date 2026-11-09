@@ -1,17 +1,15 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import httpx
 import numpy as np
-
 from sgp4.api import Satrec, jday
 from sgp4.omm import initialize
 
 from app.models.measurement import Measurement
-
 
 logger = logging.getLogger(__name__)
 
@@ -140,9 +138,9 @@ class CelesTrakAdapter:
             raise ValueError("Invalid OMM epoch") from exc
 
         if epoch.tzinfo is None:
-            epoch = epoch.replace(tzinfo=timezone.utc)
+            epoch = epoch.replace(tzinfo=UTC)
 
-        epoch = epoch.astimezone(timezone.utc)
+        epoch = epoch.astimezone(UTC)
 
         # sgp4.omm.initialize expects fractional seconds
         # without a timezone suffix.
@@ -154,7 +152,7 @@ class CelesTrakAdapter:
 
     async def refresh(self):
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if (
             self.satellite is not None
@@ -244,7 +242,7 @@ class CelesTrakAdapter:
                 "Propagation timestamp must be timezone-aware"
             )
 
-        timestamp = timestamp.astimezone(timezone.utc)
+        timestamp = timestamp.astimezone(UTC)
 
         jd, fr = jday(
             timestamp.year,
@@ -271,7 +269,7 @@ class CelesTrakAdapter:
 
             await self.refresh()
 
-            event_time = datetime.now(timezone.utc)
+            event_time = datetime.now(UTC)
 
             position, velocity = self._propagate(event_time)
 

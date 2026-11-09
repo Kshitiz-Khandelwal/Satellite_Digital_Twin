@@ -1,9 +1,8 @@
 
-import pytest
 import httpx
+import pytest
 
 from app.adapters.celestrak import CelesTrakAdapter
-
 
 SAMPLE_OMM = [{
     "OBJECT_NAME": "ISS (ZARYA)",

@@ -1,5 +1,5 @@
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 from sgp4.api import Satrec, jday
@@ -15,7 +15,7 @@ class OrbitPropagator:
         if timestamp.tzinfo is None:
             raise ValueError("Timestamp must be timezone-aware")
 
-        timestamp = timestamp.astimezone(timezone.utc)
+        timestamp = timestamp.astimezone(UTC)
 
         jd, fr = jday(
             timestamp.year,

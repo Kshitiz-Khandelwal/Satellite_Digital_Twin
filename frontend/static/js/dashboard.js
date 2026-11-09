@@ -1,59 +1,41 @@
-
-/* ==========================================
-   ORBITAL — SATELLITE DIGITAL TWIN
-   Phase 1: ISS orbital visualization
-
-   DATA: Illustrative circular-orbit simulation
-   NOT live ISS telemetry or actual SGP4 output.
-========================================== */
+/* ==========================================================================
+   ORBITAL — SATELLITE DIGITAL TWIN (Phase 2 Full Kalman-Fused Live HMI)
+   Tragic Bytes · Space Tech & Data Systems
+   
+   Architecture:
+   - Live 1 Hz WebSocket ingestion from Python SGP4 + EKF Fusion Engine
+   - Real-time 3D CesiumJS Earth rendering & geodetic positioning
+   - Dynamic 3D Kalman Covariance Confidence Zone (visibly widens on data drop)
+   - Live Subsystem Physics (Power EPS, Thermal TCS, Eclipse, Comms)
+   - Interactive Fault-Injection Sandbox & Naive Tracker Comparison
+========================================================================== */
 
 "use strict";
 
 const $ = (id) => document.getElementById(id);
 
-// ------------------------------------------
-// 1. SIMULATION PARAMETERS
-// ------------------------------------------
-
-const EARTH_RADIUS_KM = 6371;
-const ORBIT_ALTITUDE_KM = 408.2;
-const ORBIT_RADIUS_KM = EARTH_RADIUS_KM + ORBIT_ALTITUDE_KM;
-
-const ORBIT_PERIOD_SECONDS = 92.4 * 60;
-const ORBIT_INCLINATION = Cesium.Math.toRadians(51.64);
-
-const EARTH_ROTATION_RATE = 7.2921159e-5;
-
-// Accelerated simulation clock for demonstration.
-const SIMULATION_SPEED = 20;
-
-let elapsedSimulationSeconds = 0;
-let lastFrameTime = performance.now();
-
-
-// ------------------------------------------
-// 2. CLOCK
-// ------------------------------------------
-
+// --------------------------------------------------------------------------
+// 1. UTC CLOCK
+// --------------------------------------------------------------------------
 function updateClock() {
-    $("utc-clock").textContent =
-        new Date().toISOString().slice(11, 19) + " UTC";
+    const el = $("utc-clock");
+    if (el) {
+        el.textContent = new Date().toISOString().slice(11, 19) + " UTC";
+    }
 }
-
 updateClock();
 setInterval(updateClock, 1000);
 
 
-// ------------------------------------------
-// 3. CESIUM INITIALIZATION
-// ------------------------------------------
-
+// --------------------------------------------------------------------------
+// 2. CESIUM INITIALIZATION & CINEMATIC EARTH RENDERING
+// --------------------------------------------------------------------------
 const viewer = new Cesium.Viewer("cesiumContainer", {
     animation: false,
     timeline: false,
     baseLayerPicker: false,
     geocoder: false,
-    homeButton: true,
+    homeButton: false,
     sceneModePicker: false,
     navigationHelpButton: false,
     fullscreenButton: false,
@@ -61,1042 +43,506 @@ const viewer = new Cesium.Viewer("cesiumContainer", {
     selectionIndicator: false
 });
 
-
-// ------------------------------------------
-// 3. CESIUM EARTH CONFIGURATION
-// ------------------------------------------
-
 viewer.imageryLayers.removeAll();
 
-// Esri satellite imagery — no CARTO API-key watermark
+// Esri World Imagery (Satellite)
 const earthImagery = new Cesium.UrlTemplateImageryProvider({
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     credit: "Esri, Maxar, Earthstar Geographics"
 });
-
-const earthLayer = viewer.imageryLayers.addImageryProvider(
-    earthImagery
-);
-
-// Dark cinematic satellite appearance
-
-earthLayer.brightness = 0.92;
+const earthLayer = viewer.imageryLayers.addImageryProvider(earthImagery);
+earthLayer.brightness = 0.94;
 earthLayer.contrast = 1.08;
 earthLayer.saturation = 1.15;
-earthLayer.gamma = 0.95;
+earthLayer.gamma = 0.96;
 
-// ------------------------------------------
-// 3A. PROCEDURAL EARTH CLOUD LAYER
-// ------------------------------------------
-
-
-// ------------------------------------------
-// 3A. PROCEDURAL EARTH CLOUD LAYER
-// ------------------------------------------
-
-function createCloudTexture() {
-
-    const width = 1024;
-    const height = 512;
-
-    const canvas = document.createElement("canvas");
-
-    canvas.width = width;
-    canvas.height = height;
-
-    const ctx = canvas.getContext("2d");
-    const image = ctx.createImageData(width, height);
-
-    // Periodic noise for seamless globe wrapping.
-    function hash(x, y, seed) {
-        const n = Math.sin(
-            x * 127.1 +
-            y * 311.7 +
-            seed * 74.7
-        ) * 43758.5453;
-
-        return n - Math.floor(n);
-    }
-
-    function smooth(t) {
-        return t * t * (3 - 2 * t);
-    }
-
-    function noise(u, v, scaleX, scaleY, seed) {
-
-        const gx = u * scaleX;
-        const gy = v * scaleY;
-
-        const x0 = Math.floor(gx);
-        const y0 = Math.floor(gy);
-
-        const fx = smooth(gx - x0);
-        const fy = smooth(gy - y0);
-
-        const wrapX = (x) =>
-            ((x % scaleX) + scaleX) % scaleX;
-
-        const a = hash(wrapX(x0), y0, seed);
-        const b = hash(wrapX(x0 + 1), y0, seed);
-        const c = hash(wrapX(x0), y0 + 1, seed);
-        const d = hash(wrapX(x0 + 1), y0 + 1, seed);
-
-        const top = a + (b - a) * fx;
-        const bottom = c + (d - c) * fx;
-
-        return top + (bottom - top) * fy;
-    }
-
-    // Generate multi-scale cloud formations.
-    for (let y = 0; y < height; y++) {
-
-        for (let x = 0; x < width; x++) {
-
-            const u = x / width;
-            const v = y / height;
-
-            let cloud = 0;
-
-            cloud += noise(u, v, 8, 4, 1) * 0.45;
-            cloud += noise(u, v, 16, 8, 2) * 0.30;
-            cloud += noise(u, v, 32, 16, 3) * 0.17;
-            cloud += noise(u, v, 64, 32, 4) * 0.08;
-
-            // Smooth cloud edges.
-            let alpha = Math.max(
-                0,
-                Math.min(
-                    1,
-                    (cloud - 0.48) / 0.14
-                )
-            );
-
-            alpha = Math.pow(alpha, 1.5) * 0.95;
-
-            const index = (y * width + x) * 4;
-
-            image.data[index] = 245;
-            image.data[index + 1] = 249;
-            image.data[index + 2] = 255;
-            image.data[index + 3] =
-                Math.round(alpha * 255);
-        }
-    }
-
-    ctx.putImageData(image, 0, 0);
-
-    return canvas;
-}
-function createShiftedCloudTexture(sourceCanvas, shiftX) {
-    const canvas = document.createElement("canvas");
-
-    canvas.width = sourceCanvas.width;
-    canvas.height = sourceCanvas.height;
-
-    const ctx = canvas.getContext("2d");
-
-    const width = canvas.width;
-
-    // Wrap the texture horizontally to avoid visible seams.
-    const shift = ((shiftX % width) + width) % width;
-
-    ctx.drawImage(
-        sourceCanvas,
-        0, 0, width, canvas.height,
-        shift, 0, width, canvas.height
-    );
-
-    ctx.drawImage(
-        sourceCanvas,
-        0, 0, width, canvas.height,
-        shift - width, 0, width, canvas.height
-    );
-
-    return canvas;
-}
-
-// Convert generated canvas into an image URL.
-// Cesium SingleTileImageryProvider loads this URL.
-
-// ==========================================
-// CLOUD LAYER — ANIMATED
-// ==========================================
-
-const cloudCanvas = createCloudTexture();
-
-let cloudLayer = null;
-let cloudShift = 0;
-
-const CLOUD_ALPHA = 0.90;
-const CLOUD_UPDATE_INTERVAL = 30000;
-const CLOUD_CROSSFADE_DURATION = 5000;
-
-function createCloudLayer(canvas) {
-
-    const imageUrl = canvas.toDataURL("image/png");
-
-    const provider = new Cesium.SingleTileImageryProvider({
-        url: imageUrl,
-        rectangle: Cesium.Rectangle.MAX_VALUE
-    });
-
-    const layer = viewer.imageryLayers.addImageryProvider(
-        provider
-    );
-
-    layer.alpha = 0;
-    layer.brightness = 1.15;
-    layer.contrast = 1.25;
-
-    return { layer, provider };
-}
-
-function crossfadeCloudLayers(oldLayer, newLayer) {
-
-    const startTime = performance.now();
-
-    function animate(now) {
-
-        const progress = Math.min(
-            (now - startTime) / CLOUD_CROSSFADE_DURATION,
-            1
-        );
-
-        newLayer.alpha = CLOUD_ALPHA * progress;
-
-        if (oldLayer) {
-            oldLayer.alpha = CLOUD_ALPHA * (1 - progress);
-        }
-
-        if (progress < 1) {
-            requestAnimationFrame(animate);
-        } else {
-
-            if (oldLayer) {
-                viewer.imageryLayers.remove(oldLayer);
-            }
-
-            cloudLayer = newLayer;
-        }
-    }
-
-    requestAnimationFrame(animate);
-}
-
-// Create initial cloud layer.
-const initialCloud = createCloudLayer(cloudCanvas);
-
-cloudLayer = initialCloud.layer;
-
-initialCloud.layer.alpha = CLOUD_ALPHA;
-
-console.info("Earth cloud layer initialized");
-
-// Slowly drift the cloud texture.
-let cloudAnimationBusy = false;
-
-setInterval(() => {
-
-    if (cloudAnimationBusy) return;
-
-    cloudAnimationBusy = true;
-
-    // One-pixel horizontal texture shift per update.
-    cloudShift += 1;
-
-    const shiftedCanvas = createShiftedCloudTexture(
-        cloudCanvas,
-        cloudShift
-    );
-
-    const nextCloud = createCloudLayer(shiftedCanvas);
-
-    nextCloud.provider.readyPromise.then(() => {
-
-        const previousLayer = cloudLayer;
-
-        crossfadeCloudLayers(
-            previousLayer,
-            nextCloud.layer
-        );
-
-        setTimeout(() => {
-            cloudAnimationBusy = false;
-        }, CLOUD_CROSSFADE_DURATION);
-
-    }).catch((error) => {
-
-        viewer.imageryLayers.remove(nextCloud.layer);
-
-        cloudAnimationBusy = false;
-
-        console.error("Cloud update failed:", error);
-
-    });
-
-}, CLOUD_UPDATE_INTERVAL);
-
-
-// ------------------------------------------
-// 3B. EARTH ATMOSPHERE
-// ------------------------------------------
-
-// Enable globe lighting.
+// Earth Atmosphere & Lighting
 viewer.scene.globe.enableLighting = true;
-
 viewer.scene.globe.showGroundAtmosphere = true;
-
-viewer.scene.globe.baseColor =
-    Cesium.Color.fromCssColorString("#071321");
-
-// Enable blue atmospheric scattering.
+viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#071321");
 viewer.scene.skyAtmosphere.show = true;
-
-viewer.scene.skyAtmosphere.atmosphereLightIntensity = 12.0;
-
-viewer.scene.skyAtmosphere.hueShift = -0.04;
-
-viewer.scene.skyAtmosphere.saturationShift = 0.15;
-
-viewer.scene.skyAtmosphere.brightnessShift = 0.08;
-
-// Deep-space background.
-viewer.scene.backgroundColor =
-    Cesium.Color.fromCssColorString("#02040a");
-
-// Improve surface detail.
-viewer.scene.globe.maximumScreenSpaceError = 1.5;
-
-console.info("Earth atmosphere initialized");
+viewer.scene.skyAtmosphere.atmosphereLightIntensity = 11.0;
+viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#02040a");
+viewer.scene.globe.maximumScreenSpaceError = 1.6;
 
 
+// --------------------------------------------------------------------------
+// 3. 3D ENTITIES: TWIN SATELLITE, CONFIDENCE ZONE, & NAIVE GHOST
+// --------------------------------------------------------------------------
 
-
-// ------------------------------------------
-// 4. ORBITAL MATHEMATICS
-// ------------------------------------------
-
-/*
-    Generate an approximate circular orbit
-    in an Earth-centred inertial-like frame.
-
-    Then rotate into an Earth-fixed frame
-    using Earth's approximate rotation rate.
-*/
-
-function getECIPosition(angle) {
-
-    const x =
-        ORBIT_RADIUS_KM * Math.cos(angle);
-
-    const y =
-        ORBIT_RADIUS_KM *
-        Math.sin(angle) *
-        Math.cos(ORBIT_INCLINATION);
-
-    const z =
-        ORBIT_RADIUS_KM *
-        Math.sin(angle) *
-        Math.sin(ORBIT_INCLINATION);
-
-    return { x, y, z };
-}
-
-
-function eciToECEF(position, simulationTime) {
-
-    const earthAngle =
-        EARTH_ROTATION_RATE * simulationTime;
-
-    const cosAngle = Math.cos(earthAngle);
-    const sinAngle = Math.sin(earthAngle);
-
-    return {
-        x: cosAngle * position.x + sinAngle * position.y,
-        y: -sinAngle * position.x + cosAngle * position.y,
-        z: position.z
-    };
-}
-
-
-function getSatelliteState(simulationTime) {
-
-    const meanMotion =
-        (2 * Math.PI) / ORBIT_PERIOD_SECONDS;
-
-    const orbitAngle =
-        meanMotion * simulationTime;
-
-    const eci = getECIPosition(orbitAngle);
-
-    const ecef = eciToECEF(
-        eci,
-        simulationTime
-    );
-
-    return {
-        eci,
-        ecef,
-        angle: orbitAngle
-    };
-}
-
-
-// ------------------------------------------
-// 5. COORDINATE HELPERS
-// ------------------------------------------
-
-function ecefToGeographic(position) {
-
-    const radius = Math.sqrt(
-        position.x ** 2 +
-        position.y ** 2 +
-        position.z ** 2
-    );
-
-    const latitude = Math.asin(
-        position.z / radius
-    );
-
-    const longitude = Math.atan2(
-        position.y,
-        position.x
-    );
-
-    return {
-        latitude: Cesium.Math.toDegrees(latitude),
-        longitude: Cesium.Math.toDegrees(longitude)
-    };
-}
-
-
-function toCesiumPosition(position) {
-
-    // Cesium uses metres, not kilometres.
-    return new Cesium.Cartesian3(
-        position.x * 1000,
-        position.y * 1000,
-        position.z * 1000
-    );
-}
-
-
-// ------------------------------------------
-// 6. BUILD THE ORBITAL TRAJECTORY
-// ------------------------------------------
-
-function createOrbitPath(startTime) {
-
-    const positions = [];
-
-    const samples = 240;
-
-    for (let i = 0; i <= samples; i++) {
-
-        const futureTime =
-            startTime +
-            (i / samples) * ORBIT_PERIOD_SECONDS;
-
-        const state = getSatelliteState(futureTime);
-
-        positions.push(
-            toCesiumPosition(state.ecef)
-        );
-    }
-
-    return positions;
-}
-
-
-const orbitEntity = viewer.entities.add({
-
-    name: "ISS Orbital Trajectory",
-
-    polyline: {
-
-        positions: createOrbitPath(0),
-
-        width: 3,
-
-        arcType: Cesium.ArcType.NONE,
-
-        material:
-            new Cesium.PolylineGlowMaterialProperty({
-                glowPower: 0.18,
-                color: Cesium.Color.fromCssColorString(
-                    "#48cfff"
-                )
-            })
+// Main Twin Satellite Marker (Cyan Glow)
+const twinSatelliteEntity = viewer.entities.add({
+    name: "Digital Twin Satellite",
+    position: Cesium.Cartesian3.fromDegrees(0, 0, 420000),
+    point: {
+        pixelSize: 11,
+        color: Cesium.Color.fromCssColorString("#58d5f5"),
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 2,
+    },
+    label: {
+        text: "ISS (DIGITAL TWIN)",
+        font: "10px DM Mono, monospace",
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        fillColor: Cesium.Color.fromCssColorString("#e0f2fe"),
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 3,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -14),
     }
 });
 
-
-// ------------------------------------------
-// 7. BUILD THE GROUND TRACK
-// ------------------------------------------
-
-function createGroundTrack(startTime) {
-
-    const positions = [];
-
-    const samples = 240;
-
-    for (let i = 0; i <= samples; i++) {
-
-        const futureTime =
-            startTime +
-            (i / samples) * ORBIT_PERIOD_SECONDS;
-
-        const state = getSatelliteState(futureTime);
-
-        const geo = ecefToGeographic(state.ecef);
-
-        positions.push(
-            Cesium.Cartesian3.fromDegrees(
-                geo.longitude,
-                geo.latitude,
-                500
-            )
-        );
+// Dynamic Kalman Covariance Confidence Zone (3D semi-transparent sphere)
+// Expands visibly when telemetry drops!
+let currentConfidenceRadiusMeters = 300.0;
+const confidenceZoneEntity = viewer.entities.add({
+    name: "Kalman 3-Sigma Confidence Zone",
+    position: new Cesium.CallbackProperty(() => twinSatelliteEntity.position.getValue(viewer.clock.currentTime), false),
+    ellipsoid: {
+        radii: new Cesium.CallbackProperty(() => {
+            const r = Math.max(800.0, currentConfidenceRadiusMeters);
+            return new Cesium.Cartesian3(r, r, r);
+        }, false),
+        material: Cesium.Color.fromCssColorString("#06b6d4").withAlpha(0.22),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString("#58d5f5").withAlpha(0.65),
     }
+});
 
-    return positions;
-}
+// Naive Tracker Ghost (Amber Dot that freezes when severed, demonstrating Twin superiority)
+let showNaiveGhost = true;
+let naivePositionCartesian = null;
+const naiveGhostEntity = viewer.entities.add({
+    name: "Naive Tracker (Baseline Comparison)",
+    show: showNaiveGhost,
+    position: new Cesium.CallbackProperty(() => naivePositionCartesian || twinSatelliteEntity.position.getValue(viewer.clock.currentTime), false),
+    point: {
+        pixelSize: 9,
+        color: Cesium.Color.fromCssColorString("#f59e0b"),
+        outlineColor: Cesium.Color.fromCssColorString("#78350f"),
+        outlineWidth: 2,
+    },
+    label: {
+        text: "NAIVE TRACKER (FROZEN)",
+        font: "9px DM Mono, monospace",
+        fillColor: Cesium.Color.fromCssColorString("#fde68a"),
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        verticalOrigin: Cesium.VerticalOrigin.TOP,
+        pixelOffset: new Cesium.Cartesian2(0, 12),
+        show: new Cesium.CallbackProperty(() => isSeverActive, false)
+    }
+});
 
+// Orbital Forecast Track & Ground Track
+const forecastOrbitEntity = viewer.entities.add({
+    name: "Predicted Orbital Forecast Track",
+    polyline: {
+        positions: [],
+        width: 2,
+        material: new Cesium.PolylineDashMaterialProperty({
+            color: Cesium.Color.fromCssColorString("#58d5f5").withAlpha(0.7),
+            dashLength: 14.0
+        })
+    }
+});
 
 const groundTrackEntity = viewer.entities.add({
-
-    name: "ISS Ground Track",
-
+    name: "Sub-Satellite Ground Track",
     polyline: {
-
-        positions: createGroundTrack(0),
-
-        width: 2,
-
-        arcType: Cesium.ArcType.NONE,
-
-        material:
-            new Cesium.PolylineDashMaterialProperty({
-                color: Cesium.Color.fromCssColorString(
-                    "#f3bd67"
-                ),
-                dashLength: 14
-            })
+        positions: [],
+        width: 1.5,
+        material: Cesium.Color.fromCssColorString("#10b981").withAlpha(0.5)
     }
 });
 
 
-// ------------------------------------------
-// 8. CREATE ISS MARKER
-// ------------------------------------------
+// --------------------------------------------------------------------------
+// 4. WEBSOCKET REAL-TIME TELEMETRY INTEGRATION
+// --------------------------------------------------------------------------
+let ws = null;
+let reconnectTimer = null;
+let isSeverActive = false;
+let isDelayActive = false;
+let isOutliersActive = false;
+let hasInitialCameraCentered = false;
 
-const satelliteEntity = viewer.entities.add({
-
-    name: "ISS / ZARYA",
-
-    position: toCesiumPosition(
-        getSatelliteState(0).ecef
-    ),
-
-    
-point: {
-    pixelSize: 17,
-
-    color: Cesium.Color.WHITE,
-
-    outlineColor:
-        Cesium.Color.fromCssColorString("#54d6ff"),
-
-    outlineWidth: 4,
-
-    scaleByDistance:
-        new Cesium.NearFarScalar(
-            1000000,
-            1.8,
-            30000000,
-            0.9
-        )
-},
-
-
-    label: {
-
-        text: "ISS // 25544",
-
-        font: "12px monospace",
-
-        fillColor: Cesium.Color.WHITE,
-
-        outlineColor: Cesium.Color.BLACK,
-
-        outlineWidth: 3,
-
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-
-        pixelOffset: new Cesium.Cartesian2(16, -12),
-
-        showBackground: true,
-
-        backgroundColor:
-            Cesium.Color.BLACK.withAlpha(0.75),
-
-        scaleByDistance:
-            new Cesium.NearFarScalar(
-                1000000,
-                1,
-                30000000,
-                0.5
-            )
+function connectWebSocket() {
+    if (ws) {
+        try { ws.close(); } catch (e) {}
     }
-});
-/* ==========================================
-   8A. 3D INTERNATIONAL SPACE STATION MODEL
-========================================== */
 
-const issParts = [];
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/telemetry`;
+    console.info("[Digital Twin] Connecting to WebSocket:", wsUrl);
 
-const issMaterials = {
-    truss: Cesium.Color.fromCssColorString("#aebbc7"),
-    module: Cesium.Color.fromCssColorString("#dce5eb"),
-    solar: Cesium.Color.fromCssColorString("#123c78"),
-    radiator: Cesium.Color.fromCssColorString("#d5dce3"),
-    detail: Cesium.Color.fromCssColorString("#59d6ff")
-};
+    ws = new WebSocket(wsUrl);
 
-// Create a component attached to the moving ISS position.
-
-const ISS_VISUAL_SCALE = 8;
-
-function addISSPart(name, offset, dimensions, material) {
-
-    const scaledOffset = {
-        x: offset.x * ISS_VISUAL_SCALE,
-        y: offset.y * ISS_VISUAL_SCALE,
-        z: offset.z * ISS_VISUAL_SCALE
-    };
-
-    const scaledDimensions = {
-        x: dimensions.x * ISS_VISUAL_SCALE,
-        y: dimensions.y * ISS_VISUAL_SCALE,
-        z: dimensions.z * ISS_VISUAL_SCALE
-    };
-
-    const part = viewer.entities.add({
-
-        name,
-
-        position: new Cesium.CallbackProperty(() => {
-
-            const basePosition =
-                satelliteEntity.position.getValue(
-                    Cesium.JulianDate.now()
-                );
-
-            if (!basePosition) return undefined;
-
-            const frame =
-                Cesium.Transforms.eastNorthUpToFixedFrame(
-                    basePosition
-                );
-
-            return Cesium.Matrix4.multiplyByPoint(
-                frame,
-                new Cesium.Cartesian3(
-                    scaledOffset.x,
-                    scaledOffset.y,
-                    scaledOffset.z
-                ),
-                new Cesium.Cartesian3()
-            );
-
-        }, false),
-
-        orientation: new Cesium.CallbackProperty(() => {
-
-            const basePosition =
-                satelliteEntity.position.getValue(
-                    Cesium.JulianDate.now()
-                );
-
-            if (!basePosition) return undefined;
-
-            const frame =
-                Cesium.Transforms.eastNorthUpToFixedFrame(
-                    basePosition
-                );
-
-            const rotation = Cesium.Matrix4.getMatrix3(
-                frame,
-                new Cesium.Matrix3()
-            );
-
-            return Cesium.Quaternion.fromRotationMatrix(
-                rotation
-            );
-
-        }, false),
-
-        box: {
-
-            dimensions: new Cesium.Cartesian3(
-                scaledDimensions.x,
-                scaledDimensions.y,
-                scaledDimensions.z
-            ),
-
-            material: material,
-
-            outline: true,
-
-            outlineColor:
-                Cesium.Color.fromCssColorString("#72cfff")
-                    .withAlpha(0.7)
+    ws.onopen = () => {
+        console.info("[Digital Twin] WebSocket connected successfully!");
+        const badge = $("stream-connection-badge");
+        if (badge) {
+            badge.innerHTML = "<i></i> WEBSOCKET CONNECTED";
+            badge.style.color = "var(--green)";
         }
-    });
+        clearTimeout(reconnectTimer);
+    };
 
-    issParts.push(part);
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            handleTelemetryPacket(data);
+        } catch (err) {
+            console.error("[Digital Twin] Error parsing telemetry packet:", err);
+        }
+    };
 
-    return part;
+    ws.onclose = () => {
+        console.warn("[Digital Twin] WebSocket disconnected. Reconnecting in 2.0s...");
+        const badge = $("stream-connection-badge");
+        if (badge) {
+            badge.innerHTML = "<i></i> RECONNECTING...";
+            badge.style.color = "var(--amber)";
+        }
+        reconnectTimer = setTimeout(connectWebSocket, 2000);
+    };
+
+    ws.onerror = (err) => {
+        console.error("[Digital Twin] WebSocket error:", err);
+    };
 }
 
+connectWebSocket();
 
 
-// ------------------------------------------
-// CENTRAL STRUCTURE
-// ------------------------------------------
+// --------------------------------------------------------------------------
+// 5. PACKET HANDLER & HMI UPDATER
+// --------------------------------------------------------------------------
+function handleTelemetryPacket(data) {
+    if (!data) return;
 
-addISSPart(
-    "ISS Main Truss",
-    { x: 0, y: 0, z: 0 },
-    { x: 75, y: 3, z: 3 },
-    issMaterials.truss
-);
+    // Robust normalization across engine shapes
+    const geodetic = data.position_geodetic || {};
+    const lat = data.telemetry ? data.telemetry.latitude : (geodetic.latitude != null ? geodetic.latitude : 0.0);
+    const lon = data.telemetry ? data.telemetry.longitude : (geodetic.longitude != null ? geodetic.longitude : 0.0);
+    const altKm = data.telemetry ? data.telemetry.altitude_km : (geodetic.altitude_km != null ? geodetic.altitude_km : 408.0);
+    const velKmS = data.telemetry ? data.telemetry.velocity_magnitude_km_s : (geodetic.velocity_km_s != null ? geodetic.velocity_km_s : 7.66);
+    const posEcef = data.telemetry ? data.telemetry.position_ecef_km : (data.position_ecef_km || [0, 0, 0]);
 
+    const statusVal = (data.twin_state ? data.twin_state.status : data.twin_status) || "LIVE";
+    const statusColor = (data.twin_state ? data.twin_state.badge_color : data.status_color) || "#10b981";
+    const statusDesc = (data.twin_state ? data.twin_state.description : "") || "SGP4 physics corrected by live telemetry via Extended Kalman Filter.";
 
-// ------------------------------------------
-// MAIN PRESSURIZED MODULES
-// ------------------------------------------
+    const confPct = (data.fusion ? data.fusion.confidence_pct : data.ekf_confidence_pct) != null ? (data.fusion ? data.fusion.confidence_pct : data.ekf_confidence_pct) : 99.2;
+    const sigmaKm = (data.fusion ? data.fusion.sigma_pos_km : data.ekf_sigma_pos_km) != null ? (data.fusion ? data.fusion.sigma_pos_km : data.ekf_sigma_pos_km) : 0.045;
+    const confRadiusKm = (data.fusion ? data.fusion.confidence_zone_radius_km : data.ekf_uncertainty_radius_km) != null ? (data.fusion ? data.fusion.confidence_zone_radius_km : data.ekf_uncertainty_radius_km) : 0.15;
+    const innovKm = (data.fusion ? data.fusion.innovation_residual_km : data.ekf_innovation_residual_km) != null ? (data.fusion ? data.fusion.innovation_residual_km : data.ekf_innovation_residual_km) : 0.012;
 
-addISSPart(
-    "ISS Central Module",
-    { x: 0, y: 0, z: 6 },
-    { x: 15, y: 9, z: 9 },
-    issMaterials.module
-);
+    const pwr = (data.subsystems ? data.subsystems.power : data.power) || {};
+    const thm = (data.subsystems ? data.subsystems.thermal : data.thermal) || {};
+    const ecl = (data.subsystems ? data.subsystems.eclipse : data.eclipse) || {};
+    const comm = (data.subsystems ? data.subsystems.comms : data.comms) || {};
+    const naive = (data.fault_injection ? data.fault_injection.naive_tracker : data.naive_position);
+    const anomalies = data.anomalies || data.active_anomalies || [];
+    const faults = data.fault_injection || { active_config: data.active_faults };
 
-addISSPart(
-    "ISS Forward Module",
-    { x: 17, y: 0, z: 0 },
-    { x: 13, y: 8, z: 8 },
-    issMaterials.module
-);
+    // 1. Update Cesium Satellite Position
+    const altM = altKm * 1000.0;
+    const newPos = Cesium.Cartesian3.fromDegrees(lon, lat, altM);
+    twinSatelliteEntity.position = newPos;
 
-addISSPart(
-    "ISS Research Module",
-    { x: -17, y: 0, z: 0 },
-    { x: 12, y: 8, z: 8 },
-    issMaterials.module
-);
-
-
-// ------------------------------------------
-// FOUR SOLAR ARRAY PANELS
-// ------------------------------------------
-
-const solarPositions = [
-    { x: -25, y: 25, z: 0 },
-    { x: -25, y: -25, z: 0 },
-    { x: 25, y: 25, z: 0 },
-    { x: 25, y: -25, z: 0 }
-];
-
-solarPositions.forEach((position, index) => {
-
-    addISSPart(
-        `ISS Solar Array ${index + 1}`,
-        position,
-        { x: 20, y: 19, z: 0.8 },
-        issMaterials.solar
-    );
-});
-
-
-// ------------------------------------------
-// RADIATOR STRUCTURES
-// ------------------------------------------
-
-addISSPart(
-    "ISS Radiator Left",
-    { x: -8, y: 0, z: 12 },
-    { x: 3, y: 22, z: 0.8 },
-    issMaterials.radiator
-);
-
-addISSPart(
-    "ISS Radiator Right",
-    { x: 8, y: 0, z: 12 },
-    { x: 3, y: 22, z: 0.8 },
-    issMaterials.radiator
-);
-addISSPart(
-    "ISS Radiator Right",
-    { x: 8, y: 0, z: 12 },
-    { x: 3, y: 22, z: 0.8 },
-    issMaterials.radiator
-);
-
-// ------------------------------------------
-// VERIFY ISS COMPONENTS
-// ------------------------------------------
-
-console.log("ISS model components:", issParts.length);
-
-console.log(
-    "ISS model parts:",
-    issParts.map(part => part.name)
-);
-// ------------------------------------------
-// CAMERA FOLLOW MODE
-// ------------------------------------------
-
-let followISS = false;
-
-function toggleISSFollow(enabled) {
-
-    followISS = enabled;
-
-    // Hide the oversized marker when inspecting the model.
-    satelliteEntity.point.show = !enabled;
-
-    if (enabled) {
-
-        const position =
-            satelliteEntity.position.getValue(
-                Cesium.JulianDate.now()
-            );
-
-        if (position) {
-
-            viewer.camera.lookAt(
-                position,
-                new Cesium.HeadingPitchRange(
-                0,
-                Cesium.Math.toRadians(-15),
-                6000
-                )
-            );
-        }
-
-        addEvent("ISS camera-follow enabled");
-
-    } else {
-
-        viewer.camera.lookAtTransform(
-            Cesium.Matrix4.IDENTITY
-        );
-
+    // Center camera on satellite once at startup
+    if (!hasInitialCameraCentered) {
         viewer.camera.flyTo({
-
-            destination:
-                Cesium.Cartesian3.fromDegrees(
-                    0,
-                    15,
-                    28000000
-                ),
-
-            duration: 2
+            destination: Cesium.Cartesian3.fromDegrees(lon, lat, altM + 8500000.0),
+            duration: 1.5
         });
+        hasInitialCameraCentered = true;
+    }
 
-        addEvent("ISS camera-follow disabled");
+    // 2. Update Confidence Zone Ellipsoid Radius
+    // Convert 3-sigma radius (km) to meters
+    currentConfidenceRadiusMeters = confRadiusKm * 1000.0;
+
+    // 3. Update Naive Tracker Ghost
+    if (naive && showNaiveGhost) {
+        const nLat = naive.latitude != null ? naive.latitude : lat;
+        const nLon = naive.longitude != null ? naive.longitude : lon;
+        const nAlt = (naive.altitude_km || 408.0) * 1000.0;
+        naivePositionCartesian = Cesium.Cartesian3.fromDegrees(nLon, nLat, nAlt);
+        naiveGhostEntity.show = true;
+    } else {
+        naiveGhostEntity.show = false;
+    }
+
+    // 4. Update Forecast Orbit Path
+    if (data.forecast_track && data.forecast_track.length > 0) {
+        const orbitPoints = data.forecast_track.map(pt =>
+            Cesium.Cartesian3.fromDegrees(pt.longitude, pt.latitude, pt.altitude_km * 1000.0)
+        );
+        forecastOrbitEntity.polyline.positions = orbitPoints;
+
+        const groundPoints = data.forecast_track.map(pt =>
+            Cesium.Cartesian3.fromDegrees(pt.longitude, pt.latitude, 2000.0)
+        );
+        groundTrackEntity.polyline.positions = groundPoints;
+    }
+
+    // 5. Update Digital Twin State Badge
+    const badge = $("twin-state-badge");
+    const dot = $("state-dot");
+    const lbl = $("state-label");
+    if (badge && dot && lbl) {
+        lbl.textContent = statusVal;
+        dot.style.background = statusColor;
+        dot.style.boxShadow = `0 0 10px ${statusColor}`;
+        badge.style.color = statusColor;
+        badge.style.borderColor = statusColor;
+    }
+
+    if ($("panel-state-dot")) $("panel-state-dot").style.background = statusColor;
+    if ($("panel-state-text")) {
+        $("panel-state-text").textContent = `${statusVal} · ${statusVal === "PREDICTED" ? "FREE-RUNNING SGP4" : "FUSED STATE"}`;
+        $("panel-state-text").style.color = statusColor;
+    }
+    if ($("panel-state-desc")) $("panel-state-desc").textContent = statusDesc;
+    if ($("bottom-status-text")) {
+        $("bottom-status-text").textContent = statusVal;
+        $("bottom-status-text").style.color = statusColor;
+    }
+
+    // 6. Update Left Panel Flight Readouts
+    if ($("altitude")) $("altitude").textContent = altKm.toFixed(1);
+    if ($("velocity")) $("velocity").textContent = `${velKmS.toFixed(3)} km/s`;
+    if ($("latitude")) $("latitude").textContent = formatLat(lat);
+    if ($("longitude")) $("longitude").textContent = formatLon(lon);
+
+    // Kalman Uncertainty Metrics
+    if ($("header-confidence")) $("header-confidence").textContent = `${confPct.toFixed(1)}%`;
+    if ($("sigma-pos")) $("sigma-pos").textContent = `±${sigmaKm.toFixed(3)} km`;
+    if ($("confidence-radius")) $("confidence-radius").textContent = `${confRadiusKm.toFixed(2)} km (3σ)`;
+    if ($("bottom-confidence-zone")) $("bottom-confidence-zone").textContent = confRadiusKm.toFixed(2);
+    if ($("innovation-residual")) $("innovation-residual").textContent = `${innovKm.toFixed(3)} km`;
+
+    // 7. Update Subsystem Health Panel (Right Panel)
+    if ($("solar-power")) $("solar-power").textContent = `${(pwr.solar_generation_kw || 0).toFixed(1)} kW`;
+    if ($("battery-soc")) $("battery-soc").textContent = `${(pwr.battery_soc_pct || 90).toFixed(1)}%`;
+    if ($("battery-bar")) $("battery-bar").style.width = `${Math.min(100, Math.max(5, pwr.battery_soc_pct || 90))}%`;
+    if ($("bus-voltage")) $("bus-voltage").textContent = `${(pwr.bus_voltage_v || 120).toFixed(1)} V`;
+    if ($("net-power")) {
+        const net = pwr.net_power_kw || 0;
+        $("net-power").textContent = `${net >= 0 ? '+' : ''}${net.toFixed(1)} kW`;
+        $("net-power").style.color = net >= 0 ? "var(--green)" : "var(--amber)";
+    }
+    if ($("power-mode-badge")) {
+        const mode = pwr.charge_mode || pwr.charge_state || "CHARGING";
+        $("power-mode-badge").textContent = mode;
+        $("power-mode-badge").style.color = mode === "DISCHARGING" ? "var(--amber)" : "var(--green)";
+    }
+
+    if ($("core-temp")) $("core-temp").textContent = `${(thm.core_temp_c || 21).toFixed(1)} °C`;
+    if ($("array-temp")) $("array-temp").textContent = `${(thm.solar_array_temp_c || 40).toFixed(1)} °C`;
+    if ($("beta-angle")) $("beta-angle").textContent = `${(ecl.beta_angle_deg || 0).toFixed(1)}°`;
+    if ($("solar-illumination")) $("solar-illumination").textContent = `${Math.round((ecl.illumination_pct != null ? ecl.illumination_pct : (ecl.illumination_fraction || 1.0) * 100))}%`;
+
+    if ($("eclipse-badge")) {
+        const eclStatus = ecl.status || "SUNLIGHT";
+        $("eclipse-badge").textContent = eclStatus === "UMBRA" ? "🌑 UMBRA" : (eclStatus === "PENUMBRA" ? "🌗 PENUMBRA" : "☀️ SUNLIGHT");
+        $("eclipse-badge").style.color = eclStatus === "UMBRA" ? "var(--rose)" : (eclStatus === "PENUMBRA" ? "var(--amber)" : "var(--green)");
+    }
+
+    if ($("comms-latency")) $("comms-latency").textContent = `${Math.round(comm.latency_ms || 95)} ms`;
+    if ($("pointing-stability")) $("pointing-stability").textContent = `${((comm.attitude_stability_score || 0.99) * 100).toFixed(1)}%`;
+
+    // 8. Update Bottom Console Position Vectors
+    if ($("pos-x")) $("pos-x").textContent = posEcef[0] != null ? posEcef[0].toFixed(1) : "0.0";
+    if ($("pos-y")) $("pos-y").textContent = posEcef[1] != null ? posEcef[1].toFixed(1) : "0.0";
+    if ($("pos-z")) $("pos-z").textContent = posEcef[2] != null ? posEcef[2].toFixed(1) : "0.0";
+
+    // 9. Update Fault Status Bar
+    updateFaultStatusBar(faults);
+
+    // 10. Update Anomaly Stream
+    if (anomalies && anomalies.length > 0) {
+        renderAnomalyEvents(anomalies);
+    }
+}
+        $("net-power").style.color = net >= 0 ? "var(--green)" : "var(--amber)";
+    }
+    if ($("power-mode-badge")) {
+        const mode = pwr.charge_mode || "CHARGING";
+        $("power-mode-badge").textContent = mode;
+        $("power-mode-badge").style.color = mode === "DISCHARGING" ? "var(--amber)" : "var(--green)";
+    }
+
+    if ($("core-temp")) $("core-temp").textContent = `${(thm.core_temp_c || 21).toFixed(1)} °C`;
+    if ($("array-temp")) $("array-temp").textContent = `${(thm.solar_array_temp_c || 40).toFixed(1)} °C`;
+    if ($("beta-angle")) $("beta-angle").textContent = `${(ecl.beta_angle_deg || 0).toFixed(1)}°`;
+    if ($("solar-illumination")) $("solar-illumination").textContent = `${Math.round((ecl.illumination_fraction || 1.0) * 100)}%`;
+
+    if ($("eclipse-badge")) {
+        const eclStatus = ecl.status || "SUNLIGHT";
+        $("eclipse-badge").textContent = eclStatus === "UMBRA" ? "🌑 UMBRA" : (eclStatus === "PENUMBRA" ? "🌗 PENUMBRA" : "☀️ SUNLIGHT");
+        $("eclipse-badge").style.color = eclStatus === "UMBRA" ? "var(--rose)" : (eclStatus === "PENUMBRA" ? "var(--amber)" : "var(--green)");
+    }
+
+    if ($("comms-latency")) $("comms-latency").textContent = `${Math.round(comm.latency_ms || 95)} ms`;
+    if ($("pointing-stability")) $("pointing-stability").textContent = `${((comm.pointing_stability || 0.99) * 100).toFixed(1)}%`;
+
+    // 8. Update Bottom Console Position Vectors
+    const posEcef = telem.position_ecef_km || [0, 0, 0];
+    if ($("pos-x")) $("pos-x").textContent = posEcef[0].toFixed(1);
+    if ($("pos-y")) $("pos-y").textContent = posEcef[1].toFixed(1);
+    if ($("pos-z")) $("pos-z").textContent = posEcef[2].toFixed(1);
+
+    // 9. Update Fault Status Bar
+    updateFaultStatusBar(faults);
+
+    // 10. Update Anomaly Stream
+    if (data.anomalies && data.anomalies.length > 0) {
+        renderAnomalyEvents(data.anomalies);
     }
 }
 
+function formatLat(lat) {
+    if (lat == null) return "00.00°";
+    const dir = lat >= 0 ? "N" : "S";
+    return `${Math.abs(lat).toFixed(4)}° ${dir}`;
+}
 
-// Press F to follow the ISS.
-// Press Escape to return to Earth overview.
+function formatLon(lon) {
+    if (lon == null) return "00.00°";
+    const dir = lon >= 0 ? "E" : "W";
+    return `${Math.abs(lon).toFixed(4)}° ${dir}`;
+}
 
-window.addEventListener("keydown", (event) => {
+function updateFaultStatusBar(faults) {
+    const bar = $("fault-active-summary");
+    if (!bar) return;
 
-    if (
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement
-    ) {
-        return;
+    const activeCfg = faults.active_config || {};
+    const messages = [];
+
+    if (activeCfg.sever_feed) {
+        messages.push("🚨 DATA FEED SEVERED: Free-running SGP4 orbit physics with expanding covariance zone.");
+    }
+    if (activeCfg.latency_delay_seconds > 0) {
+        messages.push(`⏱ Simulated Link Delay: +${activeCfg.latency_delay_seconds}s.`);
+    }
+    if (activeCfg.inject_outlier_spikes) {
+        messages.push("⚠️ Sensor Outliers Injected: MAD filter active & innovation gate filtering spikes.");
     }
 
-    if (event.key.toLowerCase() === "f") {
-        toggleISSFollow(!followISS);
+    if (messages.length === 0) {
+        bar.textContent = "Nominal Stream: Ingesting live orbital data via Kalman fusion.";
+        bar.style.color = "var(--muted)";
+    } else {
+        bar.textContent = messages.join(" | ");
+        bar.style.color = "var(--amber)";
     }
+}
 
-    if (event.key === "Escape" && followISS) {
-        toggleISSFollow(false);
-    }
-});
-
-console.info("3D ISS schematic initialized");
-
-
-
-// ------------------------------------------
-// 9. CAMERA POSITION
-// ------------------------------------------
-
-
-
-
-viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(
-        0,
-        15,
-        28000000
-    ),
-    orientation: {
-        heading: 0,
-        pitch: Cesium.Math.toRadians(-90),
-        roll: 0
-    },
-    duration: 3
-});
-
-
-
-
-
-
-// ------------------------------------------
-// 10. EVENT STREAM
-// ------------------------------------------
-
-function addEvent(message) {
-
+function renderAnomalyEvents(anomalies) {
     const container = $("events");
-
     if (!container) return;
 
-    const item = document.createElement("div");
+    let html = "";
+    anomalies.forEach((a) => {
+        const timeStr = a.timestamp ? a.timestamp.slice(11, 19) : "NOW";
+        html += `
+            <div class="event anomaly-event">
+                <time>${timeStr}</time>
+                <span>[${a.subsystem}] ${a.message}</span>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
 
-    item.className = "event";
 
-    const time = new Date()
-        .toISOString()
-        .slice(11, 19);
+// --------------------------------------------------------------------------
+// 6. INTERACTIVE FAULT INJECTION CONTROLS (DEMO HARNESS)
+// --------------------------------------------------------------------------
+function sendFaultCommand(payload) {
+    const normalized = {
+        feed_cut: payload.feed_cut != null ? payload.feed_cut : payload.sever_feed,
+        packet_latency_s: payload.packet_latency_s != null ? payload.packet_latency_s : payload.latency_delay_seconds,
+        sensor_noise_km: payload.sensor_noise_km != null ? payload.sensor_noise_km : (payload.inject_outlier_spikes ? 50.0 : 0.0),
+        compare_naive: payload.compare_naive != null ? payload.compare_naive : showNaiveGhost,
+    };
 
-    const timeElement = document.createElement("time");
-    timeElement.textContent = time;
+    fetch("/api/faults/inject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(normalized)
+    }).catch(err => console.error("Fault API error:", err));
 
-    const messageElement = document.createElement("span");
-    messageElement.textContent = message;
-
-    item.append(timeElement, messageElement);
-
-    container.prepend(item);
-
-    while (container.children.length > 4) {
-        container.removeChild(container.lastChild);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ command: "SET_FAULT", ...normalized }));
     }
 }
 
-addEvent("Orbital simulation initialized");
+window.toggleSeverFeed = function () {
+    isSeverActive = !isSeverActive;
+    const btn = $("btn-sever-feed");
+    if (btn) btn.classList.toggle("btn-active", isSeverActive);
+    sendFaultCommand({ feed_cut: isSeverActive });
+};
+
+window.togglePacketDelay = function () {
+    isDelayActive = !isDelayActive;
+    const delay = isDelayActive ? 4.0 : 0.0;
+    const btn = $("btn-inject-delay");
+    if (btn) btn.classList.toggle("btn-active", isDelayActive);
+    sendFaultCommand({ packet_latency_s: delay });
+};
+
+window.toggleOutlierSpikes = function () {
+    isOutliersActive = !isOutliersActive;
+    const btn = $("btn-inject-outliers");
+    if (btn) btn.classList.toggle("btn-active", isOutliersActive);
+    sendFaultCommand({ sensor_noise_km: isOutliersActive ? 50.0 : 0.0 });
+};
+
+window.toggleNaiveGhost = function () {
+    showNaiveGhost = !showNaiveGhost;
+    const btnText = $("ghost-btn-text");
+    if (btnText) btnText.textContent = `Naive Ghost: ${showNaiveGhost ? "ON" : "OFF"}`;
+    naiveGhostEntity.show = showNaiveGhost;
+    sendFaultCommand({ compare_naive: showNaiveGhost });
+};
+
+window.resetAllFaults = function () {
+    isSeverActive = false;
+    isDelayActive = false;
+    isOutliersActive = false;
+    if ($("btn-sever-feed")) $("btn-sever-feed").classList.remove("btn-active");
+    if ($("btn-inject-delay")) $("btn-inject-delay").classList.remove("btn-active");
+    if ($("btn-inject-outliers")) $("btn-inject-outliers").classList.remove("btn-active");
+
+    fetch("/api/faults/reset", { method: "POST" }).catch(e => console.error(e));
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ command: "RESET_FAULTS" }));
+    }
+};
 
 
-// ------------------------------------------
-// 11. UPDATE TELEMETRY
-// ------------------------------------------
+// --------------------------------------------------------------------------
+// 7. SATELLITE TARGET SELECTOR
+// --------------------------------------------------------------------------
+const selector = $("satellite-selector");
+if (selector) {
+    selector.addEventListener("change", (e) => {
+        const noradId = parseInt(e.target.value, 10);
+        const satName = e.target.options[e.target.selectedIndex].text;
+        
+        if ($("target-name-display")) $("target-name-display").textContent = `LOW EARTH ORBIT · ${satName}`;
+        if ($("vehicle-code-label")) $("vehicle-code-label").textContent = satName.split("·")[0].trim();
+        if ($("satellite-norad-badge")) $("satellite-norad-badge").textContent = `NORAD ${noradId}`;
 
-function updateTelemetry() {
-
-    const state = getSatelliteState(
-        elapsedSimulationSeconds
-    );
-
-    const position = state.ecef;
-
-    const geo = ecefToGeographic(position);
-
-    const speed =
-        (2 * Math.PI * ORBIT_RADIUS_KM) /
-        ORBIT_PERIOD_SECONDS;
-
-    const altitude =
-        Math.sqrt(
-            position.x ** 2 +
-            position.y ** 2 +
-            position.z ** 2
-        ) - EARTH_RADIUS_KM;
-
-    satelliteEntity.position =
-        toCesiumPosition(position);
-        // Keep the camera attached to the ISS when follow mode is active.
-        if (followISS) {
-
-            viewer.camera.lookAt(
-                toCesiumPosition(position),
-
-                new Cesium.HeadingPitchRange(
-                0,
-                Cesium.Math.toRadians(-15),
-                6000
-            )
-            );
-        }
-
-    // Update position cards.
-    $("pos-x").textContent = position.x.toFixed(2);
-    $("pos-y").textContent = position.y.toFixed(2);
-    $("pos-z").textContent = position.z.toFixed(2);
-
-    $("latitude").textContent =
-        geo.latitude.toFixed(2) + "°";
-
-    $("longitude").textContent =
-        geo.longitude.toFixed(2) + "°";
-
-    $("altitude").textContent =
-        altitude.toFixed(2);
-
-    $("velocity").textContent =
-        speed.toFixed(3) + " km/s";
+        fetch(`/api/select-satellite/${noradId}`, { method: "POST" })
+            .then(res => res.json())
+            .then(res => console.info("Switched satellite:", res))
+            .catch(err => console.error("Error switching satellite:", err));
+    });
 }
-
-
-// ------------------------------------------
-// 12. SIMULATION LOOP
-// ------------------------------------------
-
-function animate(now) {
-
-    const deltaSeconds = Math.min(
-        (now - lastFrameTime) / 1000,
-        0.1
-    );
-
-    lastFrameTime = now;
-
-    elapsedSimulationSeconds +=
-        deltaSeconds * SIMULATION_SPEED;
-
-    updateTelemetry();
-
-    requestAnimationFrame(animate);
-}
-
-updateTelemetry();
-
-requestAnimationFrame(animate);
-
-
-// ------------------------------------------
-// 13. CAMERA / USER INTERACTION
-// ------------------------------------------
-
-viewer.screenSpaceEventHandler.setInputAction(
-    function () {
-        addEvent("Globe interaction detected");
-    },
-    Cesium.ScreenSpaceEventType.LEFT_CLICK
-);
-
-console.info(
-    "ORBITAL initialized: ISS simulation active."
-);

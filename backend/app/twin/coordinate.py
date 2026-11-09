@@ -1,11 +1,10 @@
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
-
-from skyfield.sgp4lib import TEME_to_ITRF
-from skyfield.constants import AU_KM, DAY_S
 from sgp4.api import jday
+from skyfield.constants import AU_KM, DAY_S
+from skyfield.sgp4lib import TEME_to_ITRF
 
 
 class CoordinateConverter:
@@ -25,7 +24,7 @@ class CoordinateConverter:
         if timestamp.tzinfo is None:
             raise ValueError("Timestamp must be timezone-aware")
 
-        timestamp = timestamp.astimezone(timezone.utc)
+        timestamp = timestamp.astimezone(UTC)
 
         position_km = np.asarray(position_km, dtype=float)
         velocity_km_s = np.asarray(velocity_km_s, dtype=float)

@@ -1,9 +1,9 @@
 import asyncio
-from datetime import datetime, timezone
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import numpy as np
-from sgp4.api import Satrec, WGS72, jday
+from sgp4.api import WGS72, Satrec, jday
 
 from app.models.measurement import Measurement
 
@@ -33,7 +33,7 @@ class SimulatorAdapter:
     def _create_orbit(self) -> Satrec:
         satellite = Satrec()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         jd, fr = jday(
             now.year,
@@ -87,7 +87,7 @@ class SimulatorAdapter:
     async def stream(self) -> AsyncIterator[Measurement]:
 
         while True:
-            event_time = datetime.now(timezone.utc)
+            event_time = datetime.now(UTC)
 
             position, velocity = self._propagate(event_time)
 

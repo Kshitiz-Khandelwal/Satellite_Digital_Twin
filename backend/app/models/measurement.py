@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -10,7 +10,7 @@ class Measurement(BaseModel):
 
     event_time: datetime
     receive_time: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: datetime.now(UTC)
     )
 
     fields: dict[str, Any]
@@ -24,4 +24,4 @@ class Measurement(BaseModel):
         if value.tzinfo is None:
             raise ValueError("Timestamp must include timezone information")
 
-        return value.astimezone(timezone.utc)
+        return value.astimezone(UTC)
