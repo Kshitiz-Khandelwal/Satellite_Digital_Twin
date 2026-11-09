@@ -1,149 +1,103 @@
-# 🛰️ Satellite Digital Twin
+<div align="center">
 
-### An Interactive 3D Satellite Monitoring and Orbital Visualization Platform
+# 🛰️ ORBITAL — Cyber-Physical Satellite Digital Twin
 
-[![Python](https://img.shields.io/badge/Python-Backend-blue?logo=python)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![CesiumJS](https://img.shields.io/badge/CesiumJS-3D%20Visualization-6CADDF)](https://cesium.com/platform/cesiumjs/)
-[![License](https://img.shields.io/badge/License-To%20Be%20Decided-lightgrey)]()
+### High-Fidelity Orbital State Estimation, Coupled Subsystem Health Physics & 3D Mission Control Cockpit
 
-**Satellite Digital Twin** is a software project focused on visualizing and monitoring satellites in orbit through an interactive 3D representation of Earth.
+[![Live Demo](https://img.shields.io/badge/Vercel-Live%20Demo-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://satellitedigitaltwin.vercel.app/)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-2.0.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![CesiumJS](https://img.shields.io/badge/CesiumJS-3D%20Globe-6CADDF?style=for-the-badge&logo=cesium&logoColor=white)](https://cesium.com/platform/cesiumjs/)
+[![Tests](https://img.shields.io/badge/Tests-24%2F24%20Passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](#-verification--test-suite)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-The platform combines satellite data processing, orbital mechanics, coordinate transformations, and 3D geospatial visualization to create a foundation for a satellite digital-twin system.
+<br/>
 
-The goal is to make satellite orbital information easier to visualize, understand, and monitor through a unified dashboard.
+**[🌍 Experience the Live Production Dashboard](https://satellitedigitaltwin.vercel.app/)** • **[📑 System Architecture](#-system-architecture)** • **[📐 Mathematical Formulations](#-mathematical-rigor--orbital-physics)** • **[🧪 Fault Injection Sandbox](#-interactive-fault-injection-sandbox)**
 
----
+<br/>
 
-## 🌍 Project Overview
-
-Satellites continuously move around Earth, and understanding their orbital position and movement requires processing orbital data and converting it into meaningful geographic information.
-
-Satellite Digital Twin aims to simplify this process by combining:
-
-- Satellite orbital data acquisition.
-- Orbital propagation using SGP4.
-- Coordinate transformation.
-- Satellite position visualization.
-- Interactive 3D Earth rendering.
-- Telemetry monitoring through a dashboard.
-
-Instead of looking only at raw orbital parameters, users can visualize satellite movement in a 3D environment.
+</div>
 
 ---
 
-## 🎯 Project Objectives
+## 🧭 Executive Summary
 
-1. Build a modular backend for satellite data ingestion and processing.
-2. Implement orbital propagation using the SGP4 model.
-3. Convert orbital coordinates into usable geographic information.
-4. Visualize Earth and satellite trajectories using CesiumJS.
-5. Develop a dashboard for monitoring satellite telemetry.
-6. Build a foundation for a more complete satellite digital-twin platform.
+Satellite telemetry downlinks are inherently vulnerable to ground-station occultations, atmospheric attenuation, transponder latency, and deep-space signal drops. Traditional satellite tracking platforms act as **naive visualizers**: when packets drop, they freeze in place, extrapolate naively, or plot erroneous sensor spikes.
+
+**ORBITAL** is an industrial-grade **Cyber-Physical Digital Twin** designed by Team **Tragic Bytes** (BMS Institute of Technology & Management, Space Tech & Data Systems track). Rather than displaying raw measurements, ORBITAL fuses **SGP4 analytical orbital propagation** with a **6-DOF Extended Kalman Filter (EKF)**, coupled **subsystem physics models** (EPS solar power, TCS radiative thermal balance, Earth shadow geometry), and a resilient **5-state twin lifecycle engine**.
+
+When ground-station telemetry drops, ORBITAL **autonomously engages dead-reckoning orbital propagation** while dynamically expanding its **3D Kalman covariance confidence ellipsoid** to mathematically represent growing positional uncertainty.
+
+```
+       NAIVE TRACKER                             ORBITAL DIGITAL TWIN
+┌─────────────────────────────┐           ┌─────────────────────────────────────────┐
+│ Signal Severed:             │    VS     │ Signal Severed:                         │
+│ • Freezes last known coord  │           │ • Seamlessly propagates via SGP4 & RK4  │
+│ • Zero uncertainty metric   │           │ • FSM switches: LIVE ➔ PREDICTED        │
+│ • Ignores subsystem physics │           │ • 3D Covariance Ellipsoid widens        │
+│ • Blind to eclipse entry    │           │ • EPS & TCS models continue radiative sim│
+└─────────────────────────────┘           └─────────────────────────────────────────┘
+```
 
 ---
 
-## ✨ Features
+## 🌟 Key Capabilities
 
-### 1. Satellite Data Acquisition
+### 1. 🛰️ 6-State Extended Kalman Filter (EKF) Orbit Fusion
+- **6-DOF Kinematic Vector**: $\mathbf{x} = [x, y, z, v_x, v_y, v_z]^T \in \mathbb{R}^6$ in Earth-Centered Earth-Fixed (ECEF) coordinates.
+- **4th-Order Runge-Kutta (RK4) Orbit Integrator**: Integrates central Earth gravitational acceleration ($\mu = 3.986 \times 10^5 \text{ km}^3/\text{s}^2$) with adaptive sub-stepping.
+- **Joseph-Form Stabilized Covariance Update**: Guarantees positive semi-definiteness of matrix $P$ under numerical roundoff errors.
+- **Dynamic 3D Uncertainty Ellipsoid**: Real-time $3\sigma_{pos}$ confidence sphere mapped in CesiumJS that contracts on measurement fusion and widens on telemetry blackout.
 
-The backend includes adapters for obtaining and generating satellite data.
+### 2. 🛡️ Data Hygiene & Innovation Gating
+- **Monotonic Timestamp Gate**: Rejects out-of-order, stale, and duplicate telemetry packets.
+- **$3.5\times$ Median Absolute Deviation (MAD) Filter**: Strips high-frequency sensor spikes before data reaches the filter.
+- **$\chi^2$ Mahalanobis Distance Gate**: Rejects measurement innovations with $d_M^2 > 16.27$ ($p < 0.001$, 3 DOF) to prevent corrupted GPS/radar measurements from diverging the filter.
 
-- CelesTrak integration for orbital element data.
-- Satellite simulation adapter for testing.
-- Structured satellite data models.
-- Measurement data representation.
+### 3. ⚡ Coupled Subsystem Health Physics
+- **Conical Earth Shadow Geometry**: Exact computation of solar vector, cylindrical umbra, penumbra, and solar illumination fraction $\eta \in [0.0, 1.0]$.
+- **Electrical Power System (EPS)**: Dynamic solar array generation ($P_{gen} = P_{max} \cdot \eta \cdot \cos\theta_{sun}$), battery charge/discharge kinetics, and State-of-Charge (SoC %).
+- **Thermal Control System (TCS)**: Multi-node radiative equilibrium balancing solar absorption ($\alpha$), Earth infrared/albedo flux, and Stefan-Boltzmann radiative cooling ($\epsilon \sigma A_r T^4$).
+- **Communications & ADCS**: Slant-range propagation latency tracking and attitude pointing stability scoring.
 
-### 2. Orbital Mechanics
+### 4. 🌍 Cinematic 3D CesiumJS Mission Control HMI
+- **Atmospheric Rayleigh Scattering**: Cinematic blue atmospheric lighting and space illumination.
+- **Procedural Multi-Scale Cloud Texture**: Real-time canvas procedural noise with dynamic horizontal drift.
+- **360° Glowing Orbit Ring**: High-visibility cyan glowing trajectory polyline (`#48cfff`) encircling the Earth.
+- **3D Satellite Schematic & Follow Mode**: Press **`F`** to engage close-up 3D satellite camera tracking; press **`Esc`** to return to space overview.
+- **Comparative Naive Tracker Ghost**: Simultaneous visual comparison showing a raw naive marker that freezes when the feed is cut, visually proving the digital twin's superiority.
 
-The project includes the foundational components needed to process satellite orbital information.
-
-- SGP4 orbital propagation module.
-- Coordinate transformation utilities.
-- TEME-related coordinate processing.
-- Satellite position calculations.
-
-### 3. 3D Earth Visualization
-
-The frontend uses CesiumJS to provide an interactive 3D Earth environment.
-
-Current visualization components include:
-
-- Earth satellite imagery.
-- 3D globe visualization.
-- Satellite marker.
-- Orbital trajectory.
-- Ground track visualization.
-- Procedurally generated cloud texture.
-- Atmospheric visual effects.
-
-### 4. Satellite Monitoring Dashboard
-
-The dashboard provides a centralized interface for observing satellite information.
-
-It currently includes:
-
-- Satellite altitude.
-- Orbital velocity.
-- Latitude and longitude.
-- Position coordinates.
-- Mission profile information.
-- Event stream.
-- UTC clock.
+### 5. 🧪 Interactive Fault Injection Sandbox
+Operators can inject simulated real-time anomalies through the HMI or REST API:
+- `[⚡ Sever Feed]`: Simulates antenna loss or orbital occultation.
+- `[⏱️ +4.0s Delay]`: Injects transmission lag to trigger the `DELAYED` state.
+- `[💥 Outlier Spikes]`: Injects rogue 50 km GPS jumps to demonstrate MAD and $\chi^2$ rejection.
+- `[↺ Reset All]`: Restores nominal telemetry.
 
 ---
 
 ## 🏗️ System Architecture
 
-The project is organized into two main components.
-
-### Backend — Data Processing and Orbital Mechanics
-
-The Python backend is responsible for satellite data acquisition, simulation, orbital calculations, and coordinate processing.
-
-Main components:
-
-| Module | Responsibility |
-|---|---|
-| `adapters/celestrak.py` | CelesTrak data integration |
-| `adapters/simulator.py` | Simulated satellite data |
-| `models/satellite.py` | Satellite data model |
-| `models/measurement.py` | Measurement data model |
-| `twin/propagator.py` | SGP4 orbital propagation |
-| `twin/coordinate.py` | Coordinate transformations |
-| `main.py` | FastAPI application entry point |
-
-### Frontend — Visualization and Monitoring
-
-The frontend provides the user interface and 3D visualization.
-
-| Component | Responsibility |
-|---|---|
-| `index.html` | Dashboard structure |
-| `style.css` | Dashboard styling |
-| `dashboard.js` | Dashboard behavior and Cesium visualization |
-
-### Architecture Flow
-
 ```mermaid
 flowchart TD
-    subgraph INGESTION["1. Telemetry Ingestion & Hygiene"]
+    subgraph INGESTION["1. INGESTION & DATA HYGIENE"]
         A1[CelesTrak OMM Ephemeris] --> SGP4[SGP4 Analytic Propagator]
         A2[Ground Station / GPS Downlink] --> HYG[Data Hygiene Gate]
         HYG -->|Monotonic Timestamp & Range Check| MAD{MAD 3.5σ Outlier Filter}
-        MAD -->|Anomaly Flagged / Reject| LKG[Last-Known-Good Cache]
+        MAD -->|Corrupted Spike Detected| REJ[Rejection Log]
         MAD -->|Clean Telemetry Validated| FUSION[Measurement Vector z_k]
     end
 
-    subgraph TWIN_CORE["2. Physics-Informed Digital Twin Core"]
-        SGP4 -->|Kinematic Prior| EKF_PRED[EKF RK4 State Propagation]
-        FUSION -->|Innovation Gating d_M < 4.03| EKF_UPD[Joseph Stabilized Covariance Update]
+    subgraph TWIN_CORE["2. EXTENDED KALMAN FILTER ENGINE"]
+        SGP4 -->|Kinematic Prior| EKF_PRED[RK4 Numerical Orbit Integrator]
+        FUSION -->|Innovation Gating d_M² < 16.27| EKF_UPD[Joseph Stabilized Covariance Update]
         EKF_PRED --> EKF_UPD
-        EKF_UPD --> STATE_VEC["State x_k = [r, v]^T\nCovariance P_k (6x6)"]
+        EKF_UPD --> STATE_VEC["Estimated State: x_k = [r, v]^T\nCovariance Matrix: P_k (6x6)"]
         STATE_VEC --> CONF["Uncertainty Radius (3σ_pos)\nConfidence Score %"]
     end
 
-    subgraph SUBSYSTEMS["3. Coupled Subsystem Health Models"]
+    subgraph SUBSYSTEMS["3. COUPLED SUBSYSTEM HEALTH MODELS"]
         STATE_VEC --> ECLIPSE[Conical Earth Shadow Geometry]
         ECLIPSE -->|Illumination Fraction η| EPS[EPS: Solar Array Gen & Battery SoC]
         ECLIPSE -->|Radiative Heat Balance| TCS[TCS: Multi-Node Thermal Model]
@@ -151,326 +105,294 @@ flowchart TD
         STATE_VEC --> COMMS[Comms: Slant Range & Link Latency]
     end
 
-    subgraph STATE_MACHINE["4. Twin Lifecycle State Machine"]
-        FUSION -.->|Packet Arrival Rate| FSM{FSM State Evaluator}
-        CONF -.->|Uncertainty Drift| FSM
-        FSM --> LIVE[● LIVE: Nominal Fusion]
+    subgraph STATE_MACHINE["4. TWIN LIFECYCLE STATE MACHINE"]
+        FUSION -.->|Packet Arrival Timing| FSM{FSM State Evaluator}
+        CONF -.->|Covariance Drift| FSM
+        FSM --> LIVE[● LIVE: Nominal Sensor Fusion]
         FSM --> DELAYED[▲ DELAYED: Latency > 1.5s]
-        FSM --> STALE[■ STALE: Age > 3.0s]
-        FSM --> PREDICTED[⚡ PREDICTED: Autonomous Dead-Reckoning]
+        FSM --> STALE[■ STALE: Age > 2.5s]
+        FSM --> PREDICTED[⚡ PREDICTED: Autonomous SGP4 Dead-Reckoning]
         FSM --> RECOVERED[↺ RECOVERED: Filter Re-Convergence]
     end
 
-    subgraph HMI["5. Mission Control Glass Cockpit"]
-        STATE_VEC --> WS[FastAPI 1 Hz WebSocket Broadcast]
-        SUBSYSTEMS --> WS
-        FSM --> WS
-        WS --> CESIUM["CesiumJS 3D Earth Globe\n- Satellite Position\n- 3D Covariance Ellipsoid\n- Naive Ghost Comparison Tracker"]
-        WS --> TELEMETRY_PANEL[Subsystem Telemetry Gauges]
-        WS --> FAULT_SANDBOX[Interactive Fault Injection Console]
+    subgraph HMI["5. MISSION CONTROL GLASS COCKPIT"]
+        STATE_VEC --> STREAM[FastAPI 1 Hz WebSocket / HTTP Polling]
+        SUBSYSTEMS --> STREAM
+        FSM --> STREAM
+        STREAM --> CESIUM["CesiumJS 3D Earth Globe\n- Satellite Position Marker\n- 3D Covariance Ellipsoid\n- Naive Ghost Comparison Marker\n- 360° Glowing Orbit Ring"]
+        STREAM --> TELEMETRY_PANEL[Subsystem Telemetry Readouts]
+        STREAM --> FAULT_SANDBOX[Interactive Fault Injection Console]
     end
 ```
 
-### Core Subsystems and Mathematical Formulations
+---
 
-#### 1. Extended Kalman Filter (EKF) Orbit Estimation
-- **State Vector**: $\mathbf{x} = [x, y, z, v_x, v_y, v_z]^T \in \mathbb{R}^6$ in ECEF coordinates.
-- **Continuous Two-Body Dynamics**:
-  $$\dot{\mathbf{x}} = f(\mathbf{x}) = \begin{bmatrix} \mathbf{v} \\ -\frac{\mu}{\|\mathbf{r}\|^3}\mathbf{r} \end{bmatrix}$$
-- **Numerical Integration**: 4th-Order Runge-Kutta (RK4) integration with dynamic time-stepping:
-  $$\mathbf{x}_{k|k-1} = \mathbf{x}_{k-1} + \frac{\Delta t}{6} (k_1 + 2k_2 + 2k_3 + k_4)$$
-- **State Transition Jacobian**: $F = \frac{\partial f}{\partial \mathbf{x}}$ computed via gravity gradient tensor:
-  $$G = -\frac{\mu}{r^3} I_3 + \frac{3\mu}{r^5} (\mathbf{r}\mathbf{r}^T), \quad F_k \approx I_6 + \begin{bmatrix} 0 & I_3 \\ G & 0 \end{bmatrix}\Delta t$$
-- **Joseph Stabilized Covariance Update**:
-  $$P_{k|k} = (I - K_k H) P_{k|k-1} (I - K_k H)^T + K_k R K_k^T$$
-  Guarantees positive semi-definiteness and eliminates matrix inversion numerical singularities.
+## 🔄 Twin Lifecycle State Machine
 
-#### 2. Conical Eclipse & Subsystem Health Physics
-- **Conical Earth Shadow Model**: Calculates solar illumination fraction $\eta \in [0.0, 1.0]$, umbra, penumbra, and beta angle ($\beta$).
-- **Electrical Power System (EPS)**:
-  $$P_{gen} = P_{max} \cdot \eta \cdot \cos(\theta_{sun}), \quad \frac{d(SoC)}{dt} = \frac{P_{gen} - P_{bus}}{E_{capacity}}$$
-- **Thermal Control System (TCS)**: Multi-node radiative heat balance:
-  $$Q_{in} = \alpha A_s S_0 \eta + Q_{albedo} + Q_{earth\_ir}, \quad Q_{out} = \epsilon \sigma A_r T^4, \quad C_{thermal} \frac{dT}{dt} = Q_{in} - Q_{out}$$
+```mermaid
+stateDiagram-v2
+    [*] --> LIVE : Initial Acquisition (Confidence > 90%)
+    
+    LIVE --> DELAYED : Packet Latency > 1.5s
+    DELAYED --> LIVE : Latency Restored < 1.0s
+    
+    LIVE --> STALE : Packet Dropout > 2.5s
+    DELAYED --> STALE : Packet Dropout > 2.5s
+    
+    STALE --> PREDICTED : Packet Dropout > 6.0s (SGP4 Autonomous Dead-Reckoning)
+    
+    PREDICTED --> RECOVERED : New Measurement Arrives (Filter Re-Convergence)
+    RECOVERED --> LIVE : Covariance Trace Contracts (Confidence > 85%)
+```
 
-#### 3. Fault Injection & Naive Tracker Comparison Sandbox
-The dashboard includes an interactive testbed allowing mission operators and evaluators to inject anomalies in real-time:
-- **Feed Severance (`feed_cut`)**: Tests telemetry drops. Watch the state transition to `PREDICTED` while the 3D Covariance Ellipsoid dynamically expands as uncertainty compounds, while a naive tracker completely freezes (`SIGNAL_LOST_FROZEN`).
-- **High Latency Injection (`packet_latency_s`)**: Simulates deep-space or congested relay delays, testing state machine transition to `DELAYED`.
-- **Sensor Noise / Outlier Spikes (`sensor_noise_km`)**: Evaluates the $3.5\times$ MAD hygiene gate and $\chi^2$ innovation gate ($d_M^2 > 16.27$) in rejecting sensor corruption.
+| State | Badge Color | Trigger Condition | Twin Engine Behavior |
+|---|---|---|---|
+| **LIVE** | `#10b981` (Emerald) | Continuous packet arrival ($\Delta t < 2.5\text{s}$, latency $< 1.5\text{s}$) | Full SGP4 + EKF measurement fusion; high confidence ($\approx 99\%$). |
+| **DELAYED** | `#f59e0b` (Amber) | Packet latency exceeds $1.5\text{s}$ | Timestamps adjusted; fusion executed with historical covariance back-propagation. |
+| **STALE** | `#f97316` (Orange) | No packet received for $> 2.5\text{s}$ | Measurement update skipped; EKF runs in open-loop prediction mode. |
+| **PREDICTED** | `#38bdf8` (Sky Blue) | Signal lost for $> 6.0\text{s}$ | Full autonomous dead-reckoning; 3D covariance ellipsoid widens. |
+| **RECOVERED** | `#06b6d4` (Cyan) | Fresh measurement received after dropout | Filter computes innovation, updates state, and rapidly contracts covariance. |
+
+---
+
+## 📐 Mathematical Rigor & Orbital Physics
+
+### 1. Extended Kalman Filter (EKF) Formulations
+The orbital state is modeled by non-linear two-body dynamics with central Earth gravity:
+$$\dot{\mathbf{x}} = f(\mathbf{x}) = \begin{bmatrix} \mathbf{v} \\ -\frac{\mu}{\|\mathbf{r}\|^3}\mathbf{r} \end{bmatrix}$$
+
+#### A. State Propagation (Runge-Kutta 4th Order)
+$$\mathbf{x}_{k|k-1} = \mathbf{x}_{k-1} + \frac{\Delta t}{6}(k_1 + 2k_2 + 2k_3 + k_4)$$
+Where:
+- $k_1 = f(\mathbf{x}_{k-1})$
+- $k_2 = f(\mathbf{x}_{k-1} + \frac{\Delta t}{2} k_1)$
+- $k_3 = f(\mathbf{x}_{k-1} + \frac{\Delta t}{2} k_2)$
+- $k_4 = f(\mathbf{x}_{k-1} + \Delta t \, k_3)$
+
+#### B. Covariance Propagation
+$$P_{k|k-1} = F_k P_{k-1|k-1} F_k^T + Q_k$$
+The continuous-to-discrete state transition Jacobian $F_k \approx I_6 + \left.\frac{\partial f}{\partial \mathbf{x}}\right|_{\mathbf{x}_{k-1}} \Delta t$ is computed via the gravity gradient tensor $G \in \mathbb{R}^{3 \times 3}$:
+$$G = -\frac{\mu}{r^3} I_3 + \frac{3\mu}{r^5} (\mathbf{r}\mathbf{r}^T), \quad F_k = \begin{bmatrix} I_3 & I_3 \Delta t \\ G \Delta t & I_3 \end{bmatrix}$$
+
+#### C. Joseph-Form Stabilized Measurement Update
+When measurement $\mathbf{z}_k$ passes the innovation gate:
+$$\tilde{\mathbf{y}}_k = \mathbf{z}_k - H \mathbf{x}_{k|k-1}$$
+$$S_k = H P_{k|k-1} H^T + R_k$$
+$$K_k = P_{k|k-1} H^T S_k^{-1}$$
+$$\mathbf{x}_{k|k} = \mathbf{x}_{k|k-1} + K_k \tilde{\mathbf{y}}_k$$
+$$P_{k|k} = (I - K_k H) P_{k|k-1} (I - K_k H)^T + K_k R_k K_k^T$$
+
+The $3\sigma$ positional confidence radius visualized on Cesium is derived directly from the position covariance partition:
+$$\sigma_{pos} = \sqrt{\text{Tr}(P_{pos})}, \quad R_{3\sigma} = 3 \cdot \sigma_{pos}$$
+
+---
+
+### 2. Thermal Radiative Balance (TCS)
+The multi-node radiative thermal model computes core temperature $T_c$ and solar array temperature $T_a$ by balancing instantaneous heat inputs and radiator emissive dissipation:
+$$C_{thermal} \frac{dT}{dt} = Q_{in} - Q_{out}$$
+$$Q_{in} = \alpha A_s S_0 \eta + Q_{albedo} + Q_{earth\_ir} + P_{internal}$$
+$$Q_{out} = \epsilon \sigma_{SB} A_{radiator} T^4$$
+
+---
+
+### 3. Electrical Power System (EPS)
+Solar array generation considers solar incidence angle $\theta$ and conical Earth shadow illumination fraction $\eta$:
+$$P_{gen} = P_{max} \cdot \eta \cdot \cos(\theta_{sun})$$
+$$\frac{d(SoC)}{dt} = \frac{P_{gen} - P_{bus}}{E_{battery\_capacity}} \times 100\%$$
+
+---
+
+## 🧪 Interactive Fault Injection Sandbox
+
+The platform provides a live testbed to demonstrate cyber-physical resilience against raw telemetry failure:
+
+| Fault Injection | Operational Effect | Twin State Machine Response | Naive Tracker Comparison |
+|---|---|---|---|
+| **Feed Severance** | Cuts incoming downlink stream | Enters `PREDICTED` mode; SGP4 dead-reckons orbit; 3D covariance ellipsoid expands from $300\text{ m}$ to $15\text{ km}$. | **FREEZES** in place at the last packet (`SIGNAL_LOST_FROZEN`). |
+| **Transmission Latency** | Introduces 4.0s packet delay | Enters `DELAYED` mode; adjusts filter timestamps; maintains covariance stability. | Lags 4 seconds behind true orbital position. |
+| **Sensor Outlier Spikes** | Injects rogue 50 km measurement jumps | $3.5\times$ MAD and $\chi^2$ innovation gate reject corrupted packets; prevents filter divergence. | Plots violent, unrealistic jumps across Earth. |
 
 ---
 
 ## 🛠️ Technology Stack
 
-| Technology | Purpose |
-|---|---|
-| Python | Backend development |
-| FastAPI | Backend API framework |
-| Pydantic | Data validation and models |
-| NumPy | Scientific computation |
-| SciPy | Scientific computing |
-| SGP4 | Orbital propagation |
-| Skyfield | Astronomical and orbital utilities |
-| CelesTrak | Satellite orbital data source |
-| HTML5 | Frontend structure |
-| CSS3 | Frontend styling |
-| JavaScript | Frontend logic |
-| CesiumJS | 3D Earth visualization |
-| Pytest | Automated testing |
+| Domain | Technology | Purpose |
+|---|---|---|
+| **Backend Framework** | [FastAPI](https://fastapi.tiangolo.com/) | High-performance asynchronous REST & WebSocket streaming |
+| **Astrodynamics** | [SGP4](https://pypi.org/project/sgp4/), [Skyfield](https://rhodesmill.org/skyfield/) | Analytical ephemeris propagation & TEME/ECEF/ITRF coordinate frames |
+| **Scientific Math** | [NumPy](https://numpy.org/), [SciPy](https://scipy.org/) | Vectorized RK4 integration, matrix inversion & covariance analysis |
+| **3D Visualization** | [CesiumJS](https://cesium.com/platform/cesiumjs/) | Interactive WebGL 3D Earth globe, trajectory polylines, 3D ellipsoids |
+| **Styling & HMI** | Modern Glassmorphism & CSS3 | Dark-theme space mission control interface with real-time status glows |
+| **Serverless Deployment** | [Vercel](https://vercel.com/) | Zero-config edge hosting with automatic 1 Hz HTTP polling fallback |
+| **Testing** | [Pytest](https://docs.pytest.org/), [HTTPX](https://www.python-httpx.org/) | 24 automated unit, integration, and mathematical test suites |
 
 ---
 
-## 📁 Project Structure
+## 📂 Project Directory Structure
 
 ```text
 Satellite_Digital_Twin/
-│
+├── api/
+│   └── index.py                     # Vercel serverless ASGI entry point
 ├── backend/
 │   ├── app/
 │   │   ├── adapters/
-│   │   │   ├── celestrak.py
-│   │   │   └── simulator.py
-│   │   │
+│   │   │   ├── celestrak.py         # CelesTrak OMM ephemeris ingestion
+│   │   │   └── simulator.py         # True kinematic trajectory simulator
 │   │   ├── api/
-│   │   ├── core/
-│   │   │
+│   │   │   ├── routes.py            # REST endpoints (telemetry, faults, targets)
+│   │   │   └── websocket.py         # 1 Hz broadcast engine & client manager
 │   │   ├── models/
-│   │   │   ├── satellite.py
-│   │   │   └── measurement.py
-│   │   │
+│   │   │   ├── measurement.py       # Pydantic schemas for telemetry frames
+│   │   │   └── satellite.py         # Satellite orbital parameter models
 │   │   ├── pipeline/
+│   │   │   ├── fault_injector.py    # Testbed for feed cuts, latency & noise
+│   │   │   ├── hygiene.py           # MAD outlier gate & monotonicity check
+│   │   │   └── state_machine.py     # 5-state twin lifecycle transition engine
 │   │   ├── twin/
-│   │   │   ├── coordinate.py
-│   │   │   └── propagator.py
-│   │   │
-│   │   └── main.py
-│   │
+│   │   │   ├── anomaly_detector.py  # Chi-squared residual anomaly monitor
+│   │   │   ├── coordinate.py        # TEME <-> ECEF <-> Geodetic conversions
+│   │   │   ├── eclipse.py           # Conical Earth shadow & solar vector geometry
+│   │   │   ├── ekf.py               # 6-DOF Extended Kalman Filter & RK4 engine
+│   │   │   ├── engine.py            # Master Digital Twin orchestrator
+│   │   │   ├── health_models.py     # EPS power & TCS thermal physics models
+│   │   │   └── propagator.py        # SGP4 analytical propagation wrapper
+│   │   └── main.py                  # FastAPI application entry point
 │   ├── tests/
-│   │   ├── test_celestrak.py
-│   │   ├── test_coordinate.py
-│   │   └── test_simulator.py
-│   │
-│   ├── requirements.txt
-│   └── pyproject.toml
-│
+│   │   ├── test_celestrak.py        # OMM parsing & validation tests
+│   │   ├── test_coordinate.py      # ECEF/Geodetic conversion verification
+│   │   ├── test_eclipse_health.py   # Conical shadow & thermal balance tests
+│   │   ├── test_ekf.py              # EKF covariance contraction/expansion tests
+│   │   ├── test_engine_routes.py    # REST & Fault injection integration tests
+│   │   ├── test_pipeline_hygiene.py # MAD filter & state machine lifecycle tests
+│   │   └── test_simulator.py        # Kinematic simulator tests
+│   ├── pyproject.toml               # Poetry/pip tooling configuration
+│   └── requirements.txt             # Python backend dependencies
 ├── frontend/
-│   ├── templates/
-│   │   └── index.html
-│   │
 │   ├── static/
 │   │   ├── css/
-│   │   │   └── style.css
-│   │   │
+│   │   │   └── style.css            # Mission control glassmorphism theme
 │   │   └── js/
-│   │       └── dashboard.js
-│   │
-│   └── app.py
-│
-├── .gitignore
-├── README.md
-└── PROJECT_STATUS.md
+│   │       └── dashboard.js         # Cesium globe, procedural clouds & telemetry HMI
+│   └── templates/
+│       └── index.html               # Semantic mission control layout
+├── docs/
+│   └── Tragic_Bytes_Satellite_Digital_Twin.pptx # Architecture pitch deck
+├── requirements.txt                 # Root dependencies for Vercel build
+├── vercel.json                      # Vercel serverless routing configuration
+└── README.md                        # Master project documentation
 ```
 
 ---
 
-## 🚀 Getting Started
-
-Follow these instructions to run the project locally.
+## ⚡ Quickstart & Local Setup
 
 ### Prerequisites
+- Python 3.12 or newer
+- Git
 
-- Python installed on your system.
-- Git.
-- A modern web browser.
-- Internet connection for external satellite data and map imagery.
-
-### 1. Clone the Repository
-
+### 1. Clone & Enter the Repository
 ```bash
-git clone https://github.com/lakshmijshastry1406/Satellite_Digital_Twin.git
-```
-
-Navigate into the project:
-
-```bash
+git clone https://github.com/Kshitiz-Khandelwal/Satellite_Digital_Twin.git
 cd Satellite_Digital_Twin
 ```
 
-### 2. Create a Virtual Environment
-
+### 2. Set Up Virtual Environment
 ```bash
+# On Linux/macOS
+python3 -m venv .venv
+source .venv/bin/activate
+
+# On Windows PowerShell
 python -m venv .venv
-```
-
-Activate it on Windows:
-
-```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 3. Install Backend Dependencies
-
-```powershell
+### 3. Install Dependencies
+```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-### 4. Start the FastAPI Server
-
-From the `backend` directory, run:
-
-```powershell
-uvicorn app.main:app --reload
+### 4. Run the Digital Twin Server
+```bash
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### 5. Open the Dashboard
-
-Visit:
-
-**Dashboard:** http://127.0.0.1:8000/
-
-**API Documentation:** http://127.0.0.1:8000/docs
-
-**Health Check:** http://127.0.0.1:8000/health
+### 5. Access the Cockpit
+- **Mission Control 3D Dashboard**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+- **Interactive Swagger API Docs**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- **Service Health Check**: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
 ---
 
-## 🧪 Running Tests
+## 🧪 Verification & Test Suite
 
-The backend includes automated tests for important components.
-
-Run the tests from the `backend` directory:
+The repository contains 24 automated mathematical and integration tests verifying EKF covariance contraction, Runge-Kutta energy conservation, conical eclipse geometry, MAD outlier rejection, and REST endpoints:
 
 ```bash
-python -m pytest -q
+cd backend
+python -m pytest -v
 ```
-
-Last verified test result:
 
 ```text
-13 passed in 8.30s
+============================= test session starts =============================
+platform win32 -- Python 3.14.5, pytest-9.1.1, pluggy-1.6.0
+collected 24 items
+
+tests/test_celestrak.py::test_celestrak_refresh PASSED                   [  4%]
+tests/test_celestrak.py::test_invalid_satellite_id PASSED                [  8%]
+tests/test_celestrak.py::test_missing_omm_fields PASSED                  [ 12%]
+tests/test_celestrak.py::test_invalid_eccentricity PASSED                [ 16%]
+tests/test_coordinate.py::test_teme_to_ecef PASSED                       [ 20%]
+tests/test_coordinate.py::test_ecef_to_geodetic PASSED                   [ 25%]
+tests/test_coordinate.py::test_geodetic_values_are_valid PASSED          [ 29%]
+tests/test_coordinate.py::test_invalid_position_rejected PASSED          [ 33%]
+tests/test_coordinate.py::test_naive_timestamp_rejected PASSED           [ 37%]
+tests/test_eclipse_health.py::test_eclipse_sunlight_vs_umbra PASSED      [ 41%]
+tests/test_eclipse_health.py::test_health_simulator_power_in_sunlight_and_eclipse PASSED [ 45%]
+tests/test_ekf.py::test_ekf_prediction_widens_covariance PASSED          [ 50%]
+tests/test_ekf.py::test_ekf_update_contracts_covariance PASSED           [ 54%]
+tests/test_ekf.py::test_ekf_rk4_energy_conservation PASSED               [ 58%]
+tests/test_engine_routes.py::test_engine_step_produces_valid_telemetry_frame PASSED [ 62%]
+tests/test_engine_routes.py::test_engine_fault_injection_feed_severance PASSED [ 66%]
+tests/test_engine_routes.py::test_fastapi_rest_endpoints PASSED          [ 70%]
+tests/test_pipeline_hygiene.py::test_hygiene_mad_outlier_rejection PASSED [ 75%]
+tests/test_pipeline_hygiene.py::test_state_machine_lifecycle_transitions PASSED [ 79%]
+tests/test_pipeline_hygiene.py::test_fault_injector_sever_and_noise PASSED [ 83%]
+tests/test_simulator.py::test_simulator_generates_measurement PASSED     [ 87%]
+tests/test_simulator.py::test_simulator_health PASSED                    [ 91%]
+tests/test_simulator.py::test_invalid_simulator_configuration PASSED     [ 95%]
+tests/test_simulator.py::test_naive_timestamp_rejected PASSED            [100%]
+
+============================= 24 passed in 1.50s ==============================
 ```
 
-The test suite covers the CelesTrak adapter, coordinate transformations, and satellite simulator.
+---
+
+## 📡 REST API Reference
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | `GET` | Serves the CesiumJS 3D Mission Control Glass Cockpit. |
+| `/health` | `GET` | Service health status and version identifier. |
+| `/api/status` | `GET` | Returns twin operational state and active fault configuration. |
+| `/api/telemetry/snapshot`| `GET` | Returns instantaneous synchronized telemetry frame (position, EKF covariance, EPS/TCS health). |
+| `/api/faults/inject` | `POST` | Injects simulated faults (`feed_cut`, `packet_latency_s`, `sensor_noise_km`). |
+| `/api/faults/reset` | `POST` | Clears all active faults and restores nominal operations. |
+| `/api/select-satellite/{norad_id}` | `POST` | Dynamically re-initializes twin tracking for specified NORAD satellite. |
+| `/ws/telemetry` | `WebSocket` | Real-time 1 Hz streaming downlink broadcasting telemetry frames. |
 
 ---
 
-## 📊 Development Status
+## 👥 Team & Academic Credits
 
-The project is actively under development.
-
-| Component | Status |
-|---|---|
-| Backend architecture | Implemented |
-| CelesTrak adapter | Implemented |
-| Satellite simulator | Implemented |
-| SGP4 propagator | Implemented |
-| Coordinate transformations | Implemented |
-| Automated backend tests | 13 passing in last verified run |
-| FastAPI entry point | Implemented |
-| CesiumJS globe | Implemented |
-| Satellite dashboard | Implemented |
-| Procedural cloud texture | Initial implementation |
-| Animated cloud movement | In progress |
-| Atmospheric rendering | In progress |
-| Day/night lighting | Planned |
-| Live backend-to-frontend integration | Planned |
-
-### Important Implementation Note
-
-The current frontend uses illustrative simulated orbital movement.
-
-Although the backend contains an SGP4 propagation module, its output is not yet fully integrated into the frontend visualization.
-
-Similarly, the current procedural cloud texture is a visual approximation and does not represent live meteorological cloud observations.
-
-The project will progressively integrate these components as development continues.
+Developed by **Team Tragic Bytes**  
+**BMS Institute of Technology & Management (BMSIT&M)**  
+*Space Tech & Data Systems Track*
 
 ---
 
-## 🗺️ Future Roadmap
+## 📄 License
 
-### Phase 1 — Earth Visualization
-
-- [x] 3D Earth globe.
-- [x] Satellite imagery.
-- [x] Initial cloud texture.
-- [ ] Improved cloud formations.
-- [ ] Animated cloud movement.
-- [ ] Atmospheric scattering.
-- [ ] Day/night boundary.
-- [ ] Satellite illumination and shadows.
-
-### Phase 2 — Satellite Tracking
-
-- [ ] Connect SGP4 propagation to the frontend.
-- [ ] Display actual propagated satellite coordinates.
-- [ ] Synchronize orbital trajectory with backend data.
-- [ ] Improve ground track calculations.
-- [ ] Support multiple satellite objects.
-
-### Phase 3 — Digital Twin Capabilities
-
-- [ ] Satellite state management.
-- [ ] Historical orbital tracking.
-- [ ] Telemetry history.
-- [ ] Satellite health monitoring.
-- [ ] Orbital anomaly detection.
-- [ ] Event and alert management.
-
-### Phase 4 — Platform Improvements
-
-- [ ] Responsive dashboard.
-- [ ] Improved API architecture.
-- [ ] Persistent telemetry storage.
-- [ ] Deployment configuration.
-- [ ] Performance optimization.
-
----
-
-## 🔭 Long-Term Vision
-
-The long-term goal is to evolve this project into a more complete satellite digital-twin environment.
-
-Potential capabilities include:
-
-- Real-time satellite position monitoring.
-- Multiple satellite tracking.
-- Orbital state visualization.
-- Historical satellite movement.
-- Telemetry analysis.
-- Satellite health monitoring.
-- Orbital anomaly identification.
-- Interactive geospatial visualization.
-
-These are future objectives, not claims about currently implemented functionality.
-
----
-
-## 🤝 Contributing
-
-Contributions, suggestions, and technical discussions are welcome.
-
-If you would like to contribute:
-
-1. Fork the repository.
-2. Create a new feature branch.
-3. Implement your changes.
-4. Test your implementation.
-5. Submit a pull request with a clear explanation.
-
-Please keep changes modular and maintain the separation between backend processing and frontend visualization.
-
----
-
-## 📌 Repository
-
-**Project:** Satellite Digital Twin
-
-**GitHub:** https://github.com/lakshmijshastry1406/Satellite_Digital_Twin
-
-**Primary branch:** `main`
-
----
-
-*Satellite Digital Twin — Bringing satellite orbital information into an interactive 3D environment.*
+This project is open-source and distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
