@@ -675,9 +675,13 @@ function connectWebSocket() {
         }
     };
 }
-// Fetch first frame immediately for instant boot, then negotiate WebSocket
+// Fetch first frame immediately for instant boot; use stateless 1 Hz HTTP on Vercel serverless or WebSocket locally
 fetchImmediateSnapshot();
-connectWebSocket();
+if (window.location.hostname.endsWith(".vercel.app")) {
+    startHttpPolling();
+} else {
+    connectWebSocket();
+}
 
 // --------------------------------------------------------------------------
 // 7. PACKET HANDLER: UPDATES 3D GLOBE + EVERY HMI READOUT CLEANLY
@@ -955,11 +959,12 @@ function syncFaultsToBackend() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ command: "SET_FAULT", ...payload }));
     } else {
+        fetchImmediateSnapshot();
         fetch("/api/faults/inject", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
-        }).then(() => fetchImmediateSnapshot()).catch(e => console.error(e));
+        }).catch(e => console.error(e));
     }
 }
 

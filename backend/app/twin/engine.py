@@ -111,8 +111,8 @@ class DigitalTwinEngine:
         # Hygiene & state machine
         self.hygiene = DataHygieneGate()
         self.state_machine = TwinStateMachine(
-            stale_threshold_seconds=2.5,
-            predicted_threshold_seconds=6.0,
+            stale_threshold_seconds=1.5,
+            predicted_threshold_seconds=4.0,
             delayed_latency_threshold_seconds=2.5,
         )
 
@@ -185,8 +185,8 @@ class DigitalTwinEngine:
         self.simulator = SimulatorAdapter(satellite_id=self.norad_id)
         self.hygiene = DataHygieneGate()
         self.state_machine = TwinStateMachine(
-            stale_threshold_seconds=2.5,
-            predicted_threshold_seconds=6.0,
+            stale_threshold_seconds=1.5,
+            predicted_threshold_seconds=4.0,
             delayed_latency_threshold_seconds=2.5,
         )
         self.health_simulator = SubsystemHealthSimulator(
