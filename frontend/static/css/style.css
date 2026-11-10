@@ -103,14 +103,29 @@ body {
 #cesiumContainer { position: absolute; inset: 0; z-index: 0; background: #02060b; }
 .cesium-widget, .cesium-widget canvas { width: 100%; height: 100%; }
 .cesium-widget-credits { opacity: .62 !important; font-size: 10px !important; }
-.cesium-viewer-toolbar { display: none; }
+.cesium-viewer-toolbar {
+  display: block !important;
+  top: 8px !important;
+  right: 24px !important;
+  z-index: 28 !important;
+}
+.cesium-button {
+  background: rgba(7, 15, 24, 0.92) !important;
+  border: 1px solid var(--line) !important;
+  color: var(--cyan) !important;
+  border-radius: 4px !important;
+}
+.cesium-button:hover {
+  border-color: var(--cyan) !important;
+  box-shadow: 0 0 12px rgba(88,213,245,.3) !important;
+}
 .scene-vignette {
   position: absolute; z-index: 1; inset: 0; pointer-events: none;
   background: radial-gradient(ellipse at 50% 43%, transparent 35%, rgba(1,4,8,.16) 75%, rgba(1,4,8,.55) 100%);
 }
 .scene-caption {
-  position: absolute; z-index: 3; left: 50%; top: 12px; transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  position: absolute; z-index: 3; left: 50%; top: 10px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
   pointer-events: none; text-shadow: 0 2px 8px #000;
 }
 .scene-caption-kicker { color: var(--cyan); font: 9px var(--mono); letter-spacing: .2em; }
@@ -118,9 +133,9 @@ body {
 
 /* Interactive Fault Injection Control Deck */
 .fault-control-deck {
-  position: absolute; z-index: 25; top: 40px; left: 50%; transform: translateX(-50%);
-  width: min(720px, calc(100% - 660px));
-  padding: 10px 16px 9px;
+  position: absolute; z-index: 25; top: 44px; left: 50%; transform: translateX(-50%);
+  width: min(740px, calc(100% - 684px));
+  padding: 9px 14px 8px;
   background: rgba(5, 12, 20, 0.92);
   border: 1px solid rgba(88, 213, 245, 0.35);
   border-radius: 6px;
@@ -128,58 +143,77 @@ body {
   backdrop-filter: blur(18px);
 }
 .fault-deck-header {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;
 }
 .fault-deck-title {
   color: var(--cyan); font: 700 9px var(--mono); letter-spacing: 0.12em;
 }
 .fault-deck-hint {
-  color: var(--dim); font: 8px var(--mono); letter-spacing: 0.06em;
+  color: var(--dim); font: 8px var(--mono); letter-spacing: 0.05em;
 }
 .fault-buttons-row {
-  display: flex; gap: 8px; flex-wrap: wrap;
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
 }
 .fault-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 10px; border-radius: 4px;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 9px; border-radius: 4px;
   background: rgba(15, 27, 42, 0.85);
   border: 1px solid var(--line);
-  color: var(--text); font: 600 10px var(--mono);
+  color: var(--text); font: 600 9.5px var(--mono);
   cursor: pointer; transition: all 0.15s ease;
 }
 .fault-btn:hover {
-  background: rgba(28, 48, 72, 0.9);
+  background: rgba(28, 48, 72, 0.95);
   border-color: var(--cyan);
 }
+.fault-btn.btn-active-subtle {
+  background: rgba(242, 189, 103, 0.14);
+  border-color: rgba(242, 189, 103, 0.55);
+  color: #fde68a;
+}
+.fault-btn.btn-active-cyan {
+  background: rgba(88, 213, 245, 0.22);
+  border-color: var(--cyan);
+  color: #e0f2fe;
+  box-shadow: 0 0 12px rgba(88, 213, 245, 0.3);
+}
 .fault-btn.btn-active {
-  background: rgba(244, 63, 94, 0.22);
+  background: rgba(244, 63, 94, 0.25);
   border-color: #f43f5e;
-  color: #fda4af;
-  box-shadow: 0 0 12px rgba(244, 63, 94, 0.3);
+  color: #fecdd3;
+  box-shadow: 0 0 14px rgba(244, 63, 94, 0.45);
 }
 .fault-btn.btn-reset {
   margin-left: auto;
-  border-color: rgba(133, 164, 191, 0.3);
-  color: var(--muted);
+  border-color: rgba(91, 224, 173, 0.38);
+  color: var(--green);
 }
 .fault-btn.btn-reset:hover {
-  color: var(--text); border-color: var(--line);
+  background: rgba(16, 185, 129, 0.15);
+  border-color: var(--green);
 }
 .fault-status-bar {
-  margin-top: 6px; font: 8px var(--mono); color: var(--muted);
-  border-top: 1px solid var(--line-soft); padding-top: 5px;
+  margin-top: 7px; font: 9px/1.35 var(--mono); color: #cbd5e1;
+  border-top: 1px solid var(--line-soft); padding-top: 6px;
 }
 
-/* Telemetry Panels */
+/* Telemetry Panels & Non-Overlapping Right Dock */
 .telemetry-panel {
-  position: absolute; z-index: 10; top: 28px; width: 300px; padding: 18px 20px;
+  position: absolute; z-index: 10; top: 24px; width: 300px; padding: 16px 18px;
   background: linear-gradient(145deg, rgba(7,15,24,.95), rgba(5,11,19,.90));
   border: 1px solid var(--line); box-shadow: 0 18px 55px rgba(0,0,0,.45);
   backdrop-filter: blur(16px);
   border-radius: 6px;
 }
-.left-panel { left: 24px; }
-.right-panel { right: 24px; width: 310px; }
+.left-panel { left: 24px; max-height: calc(100% - 168px); overflow-y: auto; }
+.right-dock {
+  position: absolute; z-index: 11; top: 46px; right: 24px; bottom: 136px; width: 308px;
+  display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+}
+.right-panel {
+  position: relative; top: auto; right: auto; width: 100%; padding: 14px 16px;
+  flex: 0 1 auto; overflow-y: auto; pointer-events: auto;
+}
 .panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 13px; border-bottom: 1px solid var(--line-soft); }
 .section-index { display: block; color: var(--cyan); font: 9px var(--mono); letter-spacing: .13em; }
 .panel-heading h2, .console-topline h2, .stream-header h2 {
@@ -261,17 +295,18 @@ body {
 .console-metric strong { overflow: hidden; color: #edf4f9; font: 500 16px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .console-metric small { color: var(--muted); font: 9px var(--mono); }
 
-/* Event Stream */
+/* Event Stream (Docked inside .right-dock with flex sizing) */
 .event-stream {
-  position: absolute; z-index: 11; right: 24px; bottom: 155px; width: 310px;
-  padding: 13px 15px; background: rgba(5,12,20,.94); border: 1px solid var(--line);
+  position: relative; right: auto; bottom: auto; width: 100%;
+  flex: 1 1 auto; min-height: 105px; display: flex; flex-direction: column; overflow: hidden;
+  padding: 12px 15px; background: rgba(5,12,20,.94); border: 1px solid var(--line);
   box-shadow: 0 12px 35px rgba(0,0,0,.4); backdrop-filter: blur(15px);
-  border-radius: 6px;
+  border-radius: 6px; pointer-events: auto;
 }
-.stream-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-bottom: 9px; border-bottom: 1px solid var(--line-soft); }
+.stream-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); flex: 0 0 auto; }
 .stream-header h2 { margin-top: 3px; font: 600 11px var(--mono); letter-spacing: .06em; }
 .stream-live { margin-top: 2px; font-size: 8px; }
-#events { display: flex; flex-direction: column; gap: 0; max-height: 120px; overflow-y: auto; }
+#events { display: flex; flex-direction: column; gap: 0; flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 .event { display: grid; grid-template-columns: 55px minmax(0,1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid rgba(133,164,191,.08); }
 .event:last-child { border-bottom: 0; padding-bottom: 0; }
 .event time { color: var(--cyan); font: 8px var(--mono); }
@@ -294,5 +329,5 @@ body {
 @media (max-width: 1200px) {
   .fault-control-deck { position: relative; inset: auto; transform: none; width: 100%; margin: 10px 0; }
   .telemetry-panel { width: 270px; }
-  .right-panel { width: 280px; }
+  .right-dock { width: 280px; }
 }

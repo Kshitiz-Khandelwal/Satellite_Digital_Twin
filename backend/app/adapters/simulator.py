@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 import numpy as np
 from sgp4.api import WGS72, Satrec, jday
 
+from app.models.catalog import get_satellite_spec
 from app.models.measurement import Measurement
+
+# Deterministic reference epoch so stateless serverless containers compute continuous motion
+REFERENCE_EPOCH = datetime(2026, 11, 1, 0, 0, 0, tzinfo=UTC)
 
 
 class SimulatorAdapter:
@@ -28,20 +32,20 @@ class SimulatorAdapter:
         self.noise_km = noise_km
 
         self.rng = np.random.default_rng(seed)
+        self.spec = get_satellite_spec(satellite_id)
         self.satellite = self._create_orbit()
 
     def _create_orbit(self) -> Satrec:
         satellite = Satrec()
-
-        now = datetime.now(UTC)
+        ref = REFERENCE_EPOCH
 
         jd, fr = jday(
-            now.year,
-            now.month,
-            now.day,
-            now.hour,
-            now.minute,
-            now.second + now.microsecond / 1_000_000,
+            ref.year,
+            ref.month,
+            ref.day,
+            ref.hour,
+            ref.minute,
+            ref.second + ref.microsecond / 1_000_000,
         )
 
         epoch = jd + fr - 2433281.5
@@ -54,12 +58,12 @@ class SimulatorAdapter:
             0.0,
             0.0,
             0.0,
-            0.0005,
-            np.deg2rad(30.0),
-            np.deg2rad(51.64),
-            np.deg2rad(45.0),
-            15.5 * 2 * np.pi / 1440,
-            np.deg2rad(100.0),
+            self.spec.eccentricity,
+            np.deg2rad(self.spec.arg_perigee_deg),
+            np.deg2rad(self.spec.inclination_deg),
+            np.deg2rad(self.spec.raan_deg),
+            self.spec.mean_motion_rev_day * 2 * np.pi / 1440.0,
+            np.deg2rad(self.spec.mean_anomaly_deg),
         )
 
         return satellite

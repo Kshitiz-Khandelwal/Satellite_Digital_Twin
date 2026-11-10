@@ -84,3 +84,54 @@ async def test_fastapi_rest_endpoints():
         resp_reset = await client.post("/api/faults/reset")
         assert resp_reset.status_code == 200
         assert resp_reset.json()["active_faults"]["feed_cut"] is False
+
+        # Target switching (NOAA-20 polar sun-synchronous 824 km orbit)
+        resp_switch = await client.post("/api/select-satellite/43013")
+        assert resp_switch.status_code == 200
+        sw_data = resp_switch.json()
+        assert sw_data["norad_id"] == 43013
+        assert sw_data["inclination_deg"] == pytest.approx(98.74, abs=0.1)
+        assert sw_data["telemetry"]["position_geodetic"]["altitude_km"] > 700.0
+        assert len(sw_data["telemetry"]["orbit_track"]) > 50
+
+        # Stateless serverless fault propagation snapshot check
+        resp_stateless = await client.get("/api/telemetry/snapshot?norad_id=20580&feed_cut=true&outage_s=12.0")
+        assert resp_stateless.status_code == 200
+        sl_data = resp_stateless.json()
+        assert sl_data["norad_id"] == 20580
+        assert sl_data["twin_status"] == "PREDICTED"
+        assert sl_data["ekf_is_propagated_only"] is True
+        assert sl_data["ekf_uncertainty_radius_km"] > 1.0
+        assert sl_data["naive_position"]["drift_km"] > 20.0
+
+        # Stateless 4s packet delay check
+        resp_delay = await client.get("/api/telemetry/snapshot?norad_id=25544&feed_cut=false&packet_latency_s=4.0&sensor_noise_km=0.0")
+        assert resp_delay.status_code == 200
+        dl_data = resp_delay.json()
+        assert dl_data["twin_status"] == "DELAYED"
+        assert dl_data["comms"]["latency_ms"] >= 4000.0
+        assert dl_data["delayed_position"] is not None
+        assert dl_data["delayed_position"]["lag_distance_km"] > 10.0
+
+        # Stateless MAD outlier spike rejection check
+        resp_spike = await client.get("/api/telemetry/snapshot?norad_id=48274&feed_cut=false&packet_latency_s=0.0&sensor_noise_km=55.0")
+        assert resp_spike.status_code == 200
+        sp_data = resp_spike.json()
+        assert sp_data["norad_id"] == 48274
+        assert sp_data["rejected_spike"] is not None
+        assert sp_data["rejected_spike"]["error_km"] > 25.0
+
+        # Frontend dashboard serves updated HMI
+        resp_home = await client.get("/")
+        assert resp_home.status_code == 200
+        assert "Follow Target (F)" in resp_home.text
+        assert "Sever Telemetry Feed" in resp_home.text
+
+        # Anomalies endpoint
+        resp_anom = await client.get("/api/anomalies")
+        assert resp_anom.status_code == 200
+        assert "events" in resp_anom.json()
+
+        # Restore back to ISS 25544 and reset faults cleanly
+        await client.post("/api/select-satellite/25544")
+        await client.post("/api/faults/reset")

@@ -80,7 +80,7 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
     start_telemetry_loop()
     try:
         # Send an immediate snapshot right upon connection
-        initial_frame = asdict(twin_engine.step())
+        initial_frame = asdict(twin_engine.step(include_orbit_track=True))
         await websocket.send_text(json.dumps(initial_frame))
 
         while True:
@@ -96,8 +96,18 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
                         sensor_noise_km=msg.get("sensor_noise_km"),
                         compare_naive=msg.get("compare_naive"),
                     )
+                    updated = asdict(twin_engine.step(include_orbit_track=False))
+                    await websocket.send_text(json.dumps(updated))
                 elif cmd == "RESET_FAULTS":
                     twin_engine.reset_faults()
+                    updated = asdict(twin_engine.step(include_orbit_track=False))
+                    await websocket.send_text(json.dumps(updated))
+                elif cmd == "SELECT_SATELLITE":
+                    norad = msg.get("norad_id")
+                    if norad is not None:
+                        twin_engine.select_satellite(int(norad))
+                        updated = asdict(twin_engine.step(include_orbit_track=True))
+                        await websocket.send_text(json.dumps(updated))
             except Exception as e:
                 logger.warning(f"Error handling websocket client message: {e}")
     except WebSocketDisconnect:

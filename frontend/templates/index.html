@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#080d13">
 
-    <title>ORBITAL — Satellite Digital Twin & Mission Control</title>
+    <title>ORBITAL — Satellite Digital Twin &amp; Mission Control</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,13 +36,13 @@
         <div class="mission-info">
             <span class="eyebrow">ACTIVE TARGET</span>
             <select id="satellite-selector" class="satellite-select-dropdown" aria-label="Select satellite target">
-                <option value="25544" selected>ISS (ZARYA) · NORAD 25544</option>
-                <option value="20580">HST (HUBBLE) · NORAD 20580</option>
-                <option value="43013">NOAA-20 · NORAD 43013</option>
-                <option value="48274">TIANGONG (CSS) · NORAD 48274</option>
+                <option value="25544" selected>ISS (ZARYA) · 51.6° LEO</option>
+                <option value="20580">HST (HUBBLE) · 28.5° OBS</option>
+                <option value="43013">NOAA-20 · 98.7° POLAR</option>
+                <option value="48274">TIANGONG (CSS) · 41.5° LEO</option>
             </select>
             <span class="mission-divider"></span>
-            <span class="mono" id="satellite-norad-badge">NORAD 25544</span>
+            <span class="mono" id="satellite-norad-badge">NORAD 25544 · 51.64°</span>
         </div>
 
         <!-- Global Digital Twin State Indicator -->
@@ -53,7 +53,7 @@
             </span>
             <span class="mission-divider"></span>
             <span class="status-label">CONFIDENCE:</span>
-            <strong id="header-confidence" class="mono text-cyan">99.2%</strong>
+            <strong id="header-confidence" class="mono text-cyan">99.0%</strong>
             <span class="mission-divider"></span>
             <strong id="utc-clock">00:00:00 UTC</strong>
         </div>
@@ -73,32 +73,42 @@
         <section class="fault-control-deck" id="fault-deck" aria-label="Fault injection controls">
             <div class="fault-deck-header">
                 <span class="fault-deck-title">⚡ FAULT INJECTION &amp; RESILIENCE SANDBOX</span>
-                <span class="fault-deck-hint">Slide 9 Demo Strategy</span>
+                <span class="fault-deck-hint">CLICK ANY SCENARIO TO TEST DIGITAL TWIN VS. NAIVE TRACKER</span>
             </div>
             <div class="fault-buttons-row">
-                <button type="button" class="fault-btn" id="btn-sever-feed" onclick="toggleSeverFeed()">
+                <button type="button" class="fault-btn" id="btn-sever-feed" onclick="toggleSeverFeed()"
+                        title="Cuts incoming ground telemetry completely. Watch Digital Twin switch to PREDICTED physics propagation & expand its 3D Uncertainty Dome while the Amber Naive Tracker freezes behind!">
                     <span class="btn-icon">✂</span>
                     <span>Sever Telemetry Feed</span>
                 </button>
-                <button type="button" class="fault-btn" id="btn-inject-delay" onclick="togglePacketDelay()">
+                <button type="button" class="fault-btn" id="btn-inject-delay" onclick="togglePacketDelay()"
+                        title="Simulates a 4-second ground link lag. Watch state turn DELAYED, comms latency jump to >4000ms, and a lagged amber packet echo trail behind the real-time Twin.">
                     <span class="btn-icon">⏱</span>
                     <span>Inject 4s Delay</span>
                 </button>
-                <button type="button" class="fault-btn" id="btn-inject-outliers" onclick="toggleOutlierSpikes()">
+                <button type="button" class="fault-btn" id="btn-inject-outliers" onclick="toggleOutlierSpikes()"
+                        title="Injects rogue 50km+ GPS spikes. Watch the 3.5x MAD & Chi2 Gate flash and reject corrupted red spikes off-track while keeping the Twin steady.">
                     <span class="btn-icon">⚠️</span>
                     <span>Inject Outliers (MAD Gate)</span>
                 </button>
-                <button type="button" class="fault-btn" id="btn-toggle-ghost" onclick="toggleNaiveGhost()">
+                <button type="button" class="fault-btn btn-active-subtle" id="btn-toggle-ghost" onclick="toggleNaiveGhost()"
+                        title="Toggles comparison with an Amber Naive Tracker that freezes during blackouts and jumps violently during spikes.">
                     <span class="btn-icon">👻</span>
                     <span id="ghost-btn-text">Naive Ghost: ON</span>
                 </button>
-                <button type="button" class="fault-btn btn-reset" onclick="resetAllFaults()">
+                <button type="button" class="fault-btn" id="btn-follow-sat" onclick="toggleISSFollowBtn()"
+                        title="Zoom camera to follow the 3D spacecraft model up close (Hotkey: F). Click Home button to return to full Earth view.">
+                    <span class="btn-icon">🛰</span>
+                    <span id="follow-btn-text">Follow Target (F)</span>
+                </button>
+                <button type="button" class="fault-btn btn-reset" onclick="resetAllFaults()"
+                        title="Clears all simulated faults and watches the EKF re-converge through RECOVERED back to LIVE.">
                     <span class="btn-icon">↺</span>
                     <span>Reset All</span>
                 </button>
             </div>
             <div class="fault-status-bar" id="fault-status-bar">
-                <span id="fault-active-summary">Nominal Stream: Ingesting live orbital data via Kalman fusion</span>
+                <span id="fault-active-summary">Nominal Stream: Ingesting live telemetry &amp; refining state via Extended Kalman Filter</span>
             </div>
         </section>
 
@@ -109,27 +119,27 @@
                     <span class="section-index">01 / FLIGHT DATA</span>
                     <h2 id="orbital-heading">Orbital state</h2>
                 </div>
-                <span class="panel-live" id="stream-connection-badge"><i></i> WEBSOCKET CONNECTED</span>
+                <span class="panel-live" id="stream-connection-badge"><i></i> CONNECTING</span>
             </div>
 
             <div class="flight-state">
                 <span class="state-kicker">FUSION REGIME &amp; STATUS</span>
                 <div class="state-value">
                     <span class="state-dot" id="panel-state-dot"></span>
-                    <span id="panel-state-text">LIVE · FUSED STATE</span>
+                    <span id="panel-state-text">LIVE · EKF FUSED</span>
                 </div>
                 <p id="panel-state-desc">SGP4 physics corrected by live telemetry via Extended Kalman Filter.</p>
             </div>
 
             <div class="primary-readout">
                 <div class="readout-label">Altitude above WGS84</div>
-                <div class="readout-value"><strong id="altitude">416.8</strong><span>km</span></div>
+                <div class="readout-value"><strong id="altitude">418.00</strong><span>km</span></div>
             </div>
 
             <div class="telemetry-list">
                 <div class="telemetry-row">
                     <span>Orbital Velocity</span>
-                    <strong id="velocity">7.668 km/s</strong>
+                    <strong id="velocity">7.660 km/s</strong>
                 </div>
                 <div class="telemetry-row">
                     <span>Latitude</span>
@@ -141,114 +151,133 @@
                 </div>
                 <div class="telemetry-row highlight-cyan">
                     <span>Kalman 1σ Uncertainty</span>
-                    <strong id="sigma-pos">±0.045 km</strong>
+                    <strong id="sigma-pos">±0.086 km</strong>
                 </div>
                 <div class="telemetry-row highlight-cyan">
                     <span>3σ Confidence Zone</span>
-                    <strong id="confidence-radius">0.135 km</strong>
+                    <strong id="confidence-radius">0.26 km</strong>
                 </div>
                 <div class="telemetry-row">
                     <span>Innovation Residual</span>
-                    <strong id="innovation-residual">0.012 km</strong>
+                    <strong id="innovation-residual">0.050 km</strong>
                 </div>
             </div>
 
             <div class="panel-footnote">
                 <span class="footnote-mark"></span>
-                <span>Kalman covariance widens dynamically during dropouts</span>
+                <span id="left-footnote">Kalman 3D uncertainty sphere widens dynamically during dropouts</span>
             </div>
         </section>
 
-        <!-- Right Panel: 02 / SUBSYSTEM HEALTH & PHYSICS TWIN -->
-        <section class="telemetry-panel right-panel" aria-labelledby="vehicle-heading">
-            <div class="panel-heading">
-                <div>
-                    <span class="section-index">02 / SUBSYSTEM TWIN</span>
-                    <h2 id="vehicle-heading">Subsystem Health</h2>
-                </div>
-                <span class="vehicle-code" id="vehicle-code-label">ISS ZARYA</span>
-            </div>
-
-            <!-- Subsystem Health Overview -->
-            <div class="subsystem-health-block">
-                <!-- Power Subsystem (EPS) -->
-                <div class="subsystem-card">
-                    <div class="subsystem-header">
-                        <span class="subsystem-title">⚡ POWER (EPS)</span>
-                        <span class="status-badge-mini" id="power-mode-badge">CHARGING</span>
+        <!-- Right Dock: 02 / SUBSYSTEM TWIN + 04 / SYSTEM LOG stacked cleanly with zero overlap -->
+        <aside class="right-dock" aria-label="Subsystem telemetry and mission event log">
+            <!-- Right Panel: 02 / SUBSYSTEM HEALTH & PHYSICS TWIN -->
+            <section class="telemetry-panel right-panel" aria-labelledby="vehicle-heading">
+                <div class="panel-heading">
+                    <div>
+                        <span class="section-index">02 / SUBSYSTEM TWIN</span>
+                        <h2 id="vehicle-heading">Subsystem Health</h2>
                     </div>
-                    <div class="subsystem-metrics-grid">
-                        <div class="subsystem-cell">
-                            <span>Solar Output</span>
-                            <strong id="solar-power">108.4 kW</strong>
-                        </div>
-                        <div class="subsystem-cell">
-                            <span>Battery SoC</span>
-                            <strong id="battery-soc">94.2%</strong>
-                        </div>
-                        <div class="subsystem-cell">
-                            <span>Bus Voltage</span>
-                            <strong id="bus-voltage">120.4 V</strong>
-                        </div>
-                        <div class="subsystem-cell">
-                            <span>Net Power</span>
-                            <strong id="net-power">+42.1 kW</strong>
-                        </div>
-                    </div>
-                    <!-- Mini battery progress bar -->
-                    <div class="progress-bar-wrap">
-                        <div class="progress-bar-fill" id="battery-bar" style="width: 94%;"></div>
-                    </div>
+                    <span class="vehicle-code" id="vehicle-code-label">ISS ZARYA</span>
                 </div>
 
-                <!-- Thermal Subsystem (TCS) & Eclipse -->
-                <div class="subsystem-card">
-                    <div class="subsystem-header">
-                        <span class="subsystem-title">🌡️ THERMAL &amp; ECLIPSE</span>
-                        <span class="status-badge-mini" id="eclipse-badge">☀️ SUNLIGHT</span>
+                <!-- Subsystem Health Overview -->
+                <div class="subsystem-health-block">
+                    <!-- Power Subsystem (EPS) -->
+                    <div class="subsystem-card">
+                        <div class="subsystem-header">
+                            <span class="subsystem-title">⚡ POWER (EPS)</span>
+                            <span class="status-badge-mini" id="power-mode-badge">CHARGING</span>
+                        </div>
+                        <div class="subsystem-metrics-grid">
+                            <div class="subsystem-cell">
+                                <span>Solar Output</span>
+                                <strong id="solar-power">98.5 kW</strong>
+                            </div>
+                            <div class="subsystem-cell">
+                                <span>Battery SoC</span>
+                                <strong id="battery-soc">92.5%</strong>
+                            </div>
+                            <div class="subsystem-cell">
+                                <span>Bus Voltage</span>
+                                <strong id="bus-voltage">120.5 V</strong>
+                            </div>
+                            <div class="subsystem-cell">
+                                <span>Net Power</span>
+                                <strong id="net-power">+32.4 kW</strong>
+                            </div>
+                        </div>
+                        <div class="progress-bar-wrap">
+                            <div class="progress-bar-fill" id="battery-bar" style="width: 92.5%;"></div>
+                        </div>
                     </div>
-                    <div class="subsystem-metrics-grid">
-                        <div class="subsystem-cell">
-                            <span>Core Temperature</span>
-                            <strong id="core-temp">21.4 °C</strong>
+
+                    <!-- Thermal Subsystem (TCS) & Eclipse -->
+                    <div class="subsystem-card">
+                        <div class="subsystem-header">
+                            <span class="subsystem-title">🌡️ THERMAL &amp; ECLIPSE</span>
+                            <span class="status-badge-mini" id="eclipse-badge">☀️ SUNLIGHT</span>
                         </div>
-                        <div class="subsystem-cell">
-                            <span>Solar Array Temp</span>
-                            <strong id="array-temp">48.2 °C</strong>
+                        <div class="subsystem-metrics-grid">
+                            <div class="subsystem-cell">
+                                <span>Core Temperature</span>
+                                <strong id="core-temp">21.7 °C</strong>
+                            </div>
+                            <div class="subsystem-cell">
+                                <span>Solar Array Temp</span>
+                                <strong id="array-temp">39.2 °C</strong>
+                            </div>
+                            <div class="subsystem-cell">
+                                <span>Beta Angle (β)</span>
+                                <strong id="beta-angle">0.0°</strong>
+                            </div>
+                            <div class="subsystem-cell">
+                                <span>Solar Illumination</span>
+                                <strong id="solar-illumination">100%</strong>
+                            </div>
                         </div>
-                        <div class="subsystem-cell">
-                            <span>Beta Angle (β)</span>
-                            <strong id="beta-angle">28.4°</strong>
+                    </div>
+
+                    <!-- Attitude & Communications -->
+                    <div class="subsystem-card">
+                        <div class="subsystem-header">
+                            <span class="subsystem-title">📡 COMMS &amp; STABILITY</span>
+                            <span class="status-badge-mini" id="comms-badge">HEALTHY</span>
                         </div>
-                        <div class="subsystem-cell">
-                            <span>Solar Illumination</span>
-                            <strong id="solar-illumination">100%</strong>
+                        <div class="subsystem-metrics-grid">
+                            <div class="subsystem-cell">
+                                <span>Link Latency</span>
+                                <strong id="comms-latency">108 ms</strong>
+                            </div>
+                            <div class="subsystem-cell">
+                                <span>Pointing Stability</span>
+                                <strong id="pointing-stability">98.8%</strong>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Attitude & Communications -->
-                <div class="subsystem-card">
-                    <div class="subsystem-header">
-                        <span class="subsystem-title">📡 COMMS &amp; STABILITY</span>
-                        <span class="status-badge-mini" id="comms-badge">HEALTHY</span>
+                <span id="confidence" class="compatibility-field" aria-hidden="true">—</span>
+            </section>
+
+            <!-- Event Stream & Anomaly Log -->
+            <section class="event-stream" aria-labelledby="events-heading">
+                <div class="stream-header">
+                    <div>
+                        <span class="section-index">04 / SYSTEM LOG</span>
+                        <h2 id="events-heading">Residual &amp; anomaly alerts</h2>
                     </div>
-                    <div class="subsystem-metrics-grid">
-                        <div class="subsystem-cell">
-                            <span>Link Latency</span>
-                            <strong id="comms-latency">92 ms</strong>
-                        </div>
-                        <div class="subsystem-cell">
-                            <span>Pointing Stability</span>
-                            <strong id="pointing-stability">99.4%</strong>
-                        </div>
+                    <span class="stream-live" id="anomaly-indicator"><i></i> MONITORING</span>
+                </div>
+
+                <div id="events">
+                    <div class="event">
+                        <time>LIVE</time>
+                        <span>Digital Twin fusion pipeline initialized</span>
                     </div>
                 </div>
-            </div>
-
-            <!-- Legacy compatibility placeholder -->
-            <span id="confidence" class="compatibility-field" aria-hidden="true">—</span>
-        </section>
+            </section>
+        </aside>
 
         <!-- Bottom Console: 03 / POSITION VECTORS & TELEMETRY -->
         <section class="bottom-console" aria-labelledby="telemetry-heading">
@@ -274,12 +303,12 @@
                     <div><strong id="pos-z">0.00</strong><small>km</small></div>
                 </div>
                 <div class="console-metric">
-                    <span class="metric-name">ORBIT PERIOD</span>
-                    <div><strong id="orbit-period">92.6</strong><small>min</small></div>
+                    <span class="metric-name">ORBIT / INCLINATION</span>
+                    <div><strong id="orbit-period">92.9m</strong><small id="orbit-inclination">51.6°</small></div>
                 </div>
                 <div class="console-metric">
                     <span class="metric-name">CONFIDENCE (3σ)</span>
-                    <div><strong id="bottom-confidence-zone">0.14</strong><small>km</small></div>
+                    <div><strong id="bottom-confidence-zone">0.26</strong><small>km</small></div>
                 </div>
                 <div class="console-metric">
                     <span class="metric-name">TWIN STATUS</span>
@@ -288,35 +317,9 @@
             </div>
         </section>
 
-        <!-- Event Stream & Anomaly Log -->
-        <section class="event-stream" aria-labelledby="events-heading">
-            <div class="stream-header">
-                <div>
-                    <span class="section-index">04 / SYSTEM LOG</span>
-                    <h2 id="events-heading">Residual &amp; anomaly alerts</h2>
-                </div>
-                <span class="stream-live" id="anomaly-indicator"><i></i> MONITORING</span>
-            </div>
-
-            <div id="events">
-                <div class="event">
-                    <time>LIVE</time>
-                    <span>Digital Twin fusion pipeline active @ 1 Hz</span>
-                </div>
-                <div class="event">
-                    <time>SGP4</time>
-                    <span>Orbital baseline initialized</span>
-                </div>
-                <div class="event">
-                    <time>EKF</time>
-                    <span>Covariance matrix initialized</span>
-                </div>
-            </div>
-        </section>
-
         <div class="workspace-footer">
             <span>ORBITAL / TRAGIC BYTES DIGITAL TWIN</span>
-            <span>SGP4 PHYSICS · EXTENDED KALMAN FILTER · SUBSYSTEM HEALTH MODELS</span>
+            <span>SGP4 PHYSICS · EXTENDED KALMAN FILTER · SUBSYSTEM HEALTH MODELS · PRESS [F] TO FOLLOW TARGET</span>
         </div>
     </main>
 </div>

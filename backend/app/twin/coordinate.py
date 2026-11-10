@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime
 
 import numpy as np
@@ -118,3 +117,21 @@ class CoordinateConverter:
             float(np.degrees(longitude)),
             float(altitude),
         )
+
+    @classmethod
+    def geodetic_to_ecef(
+        cls,
+        latitude_deg: float,
+        longitude_deg: float,
+        altitude_km: float,
+    ) -> np.ndarray:
+        """Converts WGS84 geodetic coordinates to 3D ECEF position (km)."""
+        lat = np.radians(latitude_deg)
+        lon = np.radians(longitude_deg)
+        sin_lat = np.sin(lat)
+        cos_lat = np.cos(lat)
+        n = cls.A / np.sqrt(1.0 - cls.E2 * sin_lat**2)
+        x = (n + altitude_km) * cos_lat * np.cos(lon)
+        y = (n + altitude_km) * cos_lat * np.sin(lon)
+        z = (n * (1.0 - cls.E2) + altitude_km) * sin_lat
+        return np.array([float(x), float(y), float(z)], dtype=float)
