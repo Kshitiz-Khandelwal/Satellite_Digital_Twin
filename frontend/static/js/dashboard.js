@@ -13,6 +13,7 @@ const $ = (id) => document.getElementById(id);
 let activeNoradId = 25544;
 let activeSatLabel = "ISS (ZARYA)";
 let lastRenderedTrackNorad = null;
+let initialCameraCentered = false;
 
 let isSeverActive = false;
 let severStartTimeMs = null;
@@ -79,6 +80,7 @@ const viewer = new Cesium.Viewer("cesiumContainer", {
     animation: false,
     timeline: false,
     baseLayerPicker: false,
+    baseLayer: false,
     geocoder: false,
     homeButton: true,
     sceneModePicker: false,
@@ -87,8 +89,6 @@ const viewer = new Cesium.Viewer("cesiumContainer", {
     infoBox: false,
     selectionIndicator: false
 });
-
-viewer.imageryLayers.removeAll();
 
 const earthImagery = new Cesium.UrlTemplateImageryProvider({
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -118,12 +118,7 @@ if (viewer.homeButton && viewer.homeButton.viewModel) {
         if (followISS) {
             toggleISSFollow(false);
         } else {
-            viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-            viewer.camera.flyTo({
-                destination: Cesium.Cartesian3.fromDegrees(currentLon || 0, Math.max(-45, Math.min(45, currentLat * 0.4)), 23500000),
-                orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
-                duration: 1.8
-            });
+            flyCameraToSpacecraft(currentLon, currentLat, 1.6);
         }
         addEvent("Reset camera to Global Orbital Overview");
     });
@@ -195,21 +190,32 @@ let cloudLayer = null;
 let cloudShift = 0;
 const CLOUD_ALPHA = 0.85;
 
-function createCloudLayer(canvas) {
-    const provider = new Cesium.SingleTileImageryProvider({
-        url: canvas.toDataURL("image/png"),
-        rectangle: Cesium.Rectangle.MAX_VALUE
-    });
+async function createCloudLayerAsync(canvas) {
+    const dataUrl = canvas.toDataURL("image/png");
+    let provider;
+    if (typeof Cesium.SingleTileImageryProvider.fromUrl === "function") {
+        provider = await Cesium.SingleTileImageryProvider.fromUrl(dataUrl, {
+            rectangle: Cesium.Rectangle.MAX_VALUE
+        });
+    } else {
+        provider = new Cesium.SingleTileImageryProvider({
+            url: dataUrl,
+            rectangle: Cesium.Rectangle.MAX_VALUE
+        });
+        if (provider.readyPromise) {
+            await provider.readyPromise;
+        }
+    }
     const layer = viewer.imageryLayers.addImageryProvider(provider);
-    layer.alpha = 0;
     layer.brightness = 1.15;
     layer.contrast = 1.25;
-    return { layer, provider };
+    layer.alpha = CLOUD_ALPHA;
+    return layer;
 }
 
-const initialCloud = createCloudLayer(cloudCanvas);
-cloudLayer = initialCloud.layer;
-initialCloud.layer.alpha = CLOUD_ALPHA;
+createCloudLayerAsync(cloudCanvas)
+    .then((layer) => { cloudLayer = layer; })
+    .catch((err) => console.warn("[Digital Twin] Initial cloud layer skipped:", err));
 
 let cloudAnimationBusy = false;
 setInterval(() => {
@@ -217,17 +223,16 @@ setInterval(() => {
     cloudAnimationBusy = true;
     cloudShift += 1;
     const shifted = createShiftedCloudTexture(cloudCanvas, cloudShift);
-    const nextCloud = createCloudLayer(shifted);
-    nextCloud.provider.readyPromise.then(() => {
-        const old = cloudLayer;
-        nextCloud.layer.alpha = CLOUD_ALPHA;
-        if (old) viewer.imageryLayers.remove(old);
-        cloudLayer = nextCloud.layer;
-        cloudAnimationBusy = false;
-    }).catch(() => {
-        viewer.imageryLayers.remove(nextCloud.layer);
-        cloudAnimationBusy = false;
-    });
+    createCloudLayerAsync(shifted)
+        .then((nextLayer) => {
+            const old = cloudLayer;
+            if (old) viewer.imageryLayers.remove(old);
+            cloudLayer = nextLayer;
+            cloudAnimationBusy = false;
+        })
+        .catch(() => {
+            cloudAnimationBusy = false;
+        });
 }, 30000);
 
 // --------------------------------------------------------------------------
@@ -308,22 +313,24 @@ const satelliteEntity = viewer.entities.add({
     }
 });
 
-// Dynamic Kalman 3-Sigma Covariance Confidence Zone (visually scaled so expansion from space is dramatic!)
+// Dynamic Kalman 3-Sigma Covariance Confidence Zone (ColorMaterialProperty required by Cesium 1.126)
 const confidenceZoneEntity = viewer.entities.add({
     name: "Kalman 3-Sigma Confidence Dome",
-    show: new Cesium.CallbackProperty(() => !followISS, false),
-    position: new Cesium.CallbackProperty(() => satelliteEntity.position.getValue(Cesium.JulianDate.now()), false),
+    show: true,
+    position: Cesium.Cartesian3.fromDegrees(0, 0, 418000),
     ellipsoid: {
         radii: new Cesium.CallbackProperty(() => {
             const r = Math.max(70000.0, currentConfidenceRadiusMeters);
             return new Cesium.Cartesian3(r, r, r);
         }, false),
-        material: new Cesium.CallbackProperty(() => {
-            if (currentTwinStatus === "PREDICTED" || isSeverActive) {
-                return Cesium.Color.fromCssColorString("#38bdf8").withAlpha(0.32);
-            }
-            return Cesium.Color.fromCssColorString("#06b6d4").withAlpha(0.16);
-        }, false),
+        material: new Cesium.ColorMaterialProperty(
+            new Cesium.CallbackProperty(() => {
+                if (currentTwinStatus === "PREDICTED" || isSeverActive) {
+                    return Cesium.Color.fromCssColorString("#38bdf8").withAlpha(0.32);
+                }
+                return Cesium.Color.fromCssColorString("#06b6d4").withAlpha(0.16);
+            }, false)
+        ),
         outline: true,
         outlineColor: new Cesium.CallbackProperty(() => {
             if (currentTwinStatus === "PREDICTED" || isSeverActive) {
@@ -337,8 +344,8 @@ const confidenceZoneEntity = viewer.entities.add({
 // Naive Tracker Comparison Ghost (Freezes in place when Sever Telemetry is active)
 const naiveGhostEntity = viewer.entities.add({
     name: "Naive Tracker (Baseline Comparison)",
-    show: new Cesium.CallbackProperty(() => showNaiveGhost && (isSeverActive || isOutliersActive), false),
-    position: new Cesium.CallbackProperty(() => naivePositionCartesian || satelliteEntity.position.getValue(Cesium.JulianDate.now()), false),
+    show: false,
+    position: Cesium.Cartesian3.fromDegrees(0, 0, 418000),
     point: {
         pixelSize: 13,
         color: Cesium.Color.fromCssColorString("#f59e0b"),
@@ -367,7 +374,7 @@ const naiveGhostEntity = viewer.entities.add({
 // Drift Tether connecting Frozen Naive Ghost to Continuing Digital Twin
 const driftTetherEntity = viewer.entities.add({
     name: "Naive vs Digital Twin Drift Tether",
-    show: new Cesium.CallbackProperty(() => showNaiveGhost && isSeverActive && naivePositionCartesian != null, false),
+    show: false,
     polyline: {
         positions: new Cesium.CallbackProperty(() => {
             const pTwin = satelliteEntity.position.getValue(Cesium.JulianDate.now());
@@ -386,8 +393,8 @@ const driftTetherEntity = viewer.entities.add({
 // Delayed Packet Echo Marker (Visible when Inject 4s Delay is active)
 const delayedEchoEntity = viewer.entities.add({
     name: "Delayed Ground Packet Echo",
-    show: new Cesium.CallbackProperty(() => isDelayActive && delayedPosVisible && delayedPositionCartesian != null, false),
-    position: new Cesium.CallbackProperty(() => delayedPositionCartesian || satelliteEntity.position.getValue(Cesium.JulianDate.now()), false),
+    show: false,
+    position: Cesium.Cartesian3.fromDegrees(0, 0, 418000),
     point: {
         pixelSize: 11,
         color: Cesium.Color.fromCssColorString("#fbbf24"),
@@ -411,8 +418,8 @@ const delayedEchoEntity = viewer.entities.add({
 // MAD / Chi2 Gate Rejected Outlier Flash Marker (Visible when Inject Outliers is active)
 const rejectedSpikeEntity = viewer.entities.add({
     name: "Rejected Rogue Outlier Spike",
-    show: new Cesium.CallbackProperty(() => Date.now() < rejectedSpikeExpiresAt && rejectedSpikeCartesian != null, false),
-    position: new Cesium.CallbackProperty(() => rejectedSpikeCartesian || satelliteEntity.position.getValue(Cesium.JulianDate.now()), false),
+    show: false,
+    position: Cesium.Cartesian3.fromDegrees(0, 0, 418000),
     point: {
         pixelSize: 12,
         color: Cesium.Color.fromCssColorString("#f43f5e"),
@@ -435,7 +442,7 @@ const rejectedSpikeEntity = viewer.entities.add({
 
 const outlierLineEntity = viewer.entities.add({
     name: "Rejected Outlier Vector",
-    show: new Cesium.CallbackProperty(() => Date.now() < rejectedSpikeExpiresAt && rejectedSpikeCartesian != null, false),
+    show: false,
     polyline: {
         positions: new Cesium.CallbackProperty(() => {
             const pTwin = satelliteEntity.position.getValue(Cesium.JulianDate.now());
@@ -450,6 +457,17 @@ const outlierLineEntity = viewer.entities.add({
         })
     }
 });
+
+function syncOverlayVisibility() {
+    confidenceZoneEntity.show = !followISS;
+    naiveGhostEntity.show = Boolean(showNaiveGhost && (isSeverActive || isOutliersActive) && naivePositionCartesian);
+    driftTetherEntity.show = Boolean(showNaiveGhost && isSeverActive && naivePositionCartesian);
+    delayedEchoEntity.show = Boolean(isDelayActive && delayedPosVisible && delayedPositionCartesian);
+    const spikeActive = Boolean(Date.now() < rejectedSpikeExpiresAt && rejectedSpikeCartesian);
+    rejectedSpikeEntity.show = spikeActive;
+    outlierLineEntity.show = spikeActive;
+}
+setInterval(syncOverlayVisibility, 500);
 
 // --------------------------------------------------------------------------
 // 5. 3D ISS / SPACECRAFT STRUCTURAL SCHEMATIC & FOLLOW MODE
@@ -499,6 +517,7 @@ let followISS = false;
 function toggleISSFollow(enabled) {
     followISS = enabled;
     satelliteEntity.point.show = !enabled;
+    syncOverlayVisibility();
     const followBtn = $("btn-follow-sat");
     const followTxt = $("follow-btn-text");
     if (followBtn) followBtn.classList.toggle("btn-active-cyan", enabled);
@@ -511,12 +530,7 @@ function toggleISSFollow(enabled) {
         }
         addEvent("Close-up 3D target tracking camera active");
     } else {
-        viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-        viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(currentLon || 0, Math.max(-45, Math.min(45, currentLat * 0.4)), 23500000),
-            orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
-            duration: 1.8
-        });
+        flyCameraToSpacecraft(currentLon, currentLat, 1.6);
         addEvent("Global Earth overview camera restored");
     }
 }
@@ -531,11 +545,22 @@ window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && followISS) toggleISSFollow(false);
 });
 
-viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(20, 15, 24500000),
-    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
-    duration: 2.2
+viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(20, 15, 25500000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 }
 });
+
+function flyCameraToSpacecraft(lon, lat, durationS = 1.6) {
+    if (followISS) return;
+    // Slight southern camera shift keeps high-latitude satellites visible below the center Fault Deck
+    const viewLat = Math.max(-45, Math.min(48, (lat || 0) * 0.65 - 6));
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(lon || 0, viewLat, 25500000),
+        orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
+        duration: durationS
+    });
+}
 
 // --------------------------------------------------------------------------
 // 6. RESILIENT TELEMETRY LINK (WEBSOCKET + STATELESS SERVERLESS FALLBACK)
@@ -691,9 +716,14 @@ function handleTelemetryPacket(data) {
     // Scale 3D sphere visually so small LEO uncertainty is a sleek halo (~80km) and outage divergence balloons visibly (~900km)
     currentConfidenceRadiusMeters = 75000.0 + Math.min(850000.0, confRadiusKm * 52000.0);
 
-    // 1. Update Satellite Marker Position
+    // 1. Update Satellite Marker & Confidence Dome Position
     const newPos = Cesium.Cartesian3.fromDegrees(currentLon, currentLat, currentAltKm * 1000.0);
     satelliteEntity.position = newPos;
+    confidenceZoneEntity.position = newPos;
+    if (!initialCameraCentered) {
+        initialCameraCentered = true;
+        flyCameraToSpacecraft(currentLon, currentLat, 1.4);
+    }
     if (followISS) {
         viewer.camera.lookAt(newPos, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-18), 5500));
     }
@@ -720,6 +750,7 @@ function handleTelemetryPacket(data) {
             naive.latitude,
             (naive.altitude_km || currentAltKm) * 1000.0
         );
+        naiveGhostEntity.position = naivePositionCartesian;
         naiveDriftKm = naive.drift_km || 0.0;
     }
 
@@ -731,6 +762,7 @@ function handleTelemetryPacket(data) {
             delayed.latitude,
             (delayed.altitude_km || currentAltKm) * 1000.0
         );
+        delayedEchoEntity.position = delayedPositionCartesian;
         delayedLagLabel = `LAGGED PACKET (-${delayed.latency_s}s · ${delayed.lag_distance_km} km)`;
         delayedPosVisible = true;
     } else {
@@ -741,6 +773,7 @@ function handleTelemetryPacket(data) {
     if (data.rejected_spike) {
         const rs = data.rejected_spike;
         rejectedSpikeCartesian = Cesium.Cartesian3.fromDegrees(rs.longitude, rs.latitude, (rs.altitude_km || currentAltKm) * 1000.0);
+        rejectedSpikeEntity.position = rejectedSpikeCartesian;
         rejectedSpikeLabel = `✕ MAD REJECTED (+${rs.error_km} km)`;
         rejectedSpikeExpiresAt = Date.now() + 2400;
 
@@ -749,6 +782,8 @@ function handleTelemetryPacket(data) {
             lastLoggedSpikeMs = Date.now();
         }
     }
+
+    syncOverlayVisibility();
 
     // 7. Update Header & Target Identity
     if ($("satellite-norad-badge")) {
@@ -934,6 +969,7 @@ window.toggleSeverFeed = function () {
     if (!isSeverActive) recoveryFlashUntil = Date.now() + 2200;
     const btn = $("btn-sever-feed");
     if (btn) btn.classList.toggle("btn-active", isSeverActive);
+    syncOverlayVisibility();
     syncFaultsToBackend();
     addEvent(
         isSeverActive ? "✂ Ground feed severed — EKF autonomous propagation active" : "↺ Ground feed restored — EKF re-converging",
@@ -945,6 +981,7 @@ window.togglePacketDelay = function () {
     isDelayActive = !isDelayActive;
     const btn = $("btn-inject-delay");
     if (btn) btn.classList.toggle("btn-active", isDelayActive);
+    syncOverlayVisibility();
     syncFaultsToBackend();
     addEvent(isDelayActive ? "⏱ Injected +4.0s downlink packet lag" : "Downlink latency restored to nominal", isDelayActive);
 };
@@ -953,6 +990,7 @@ window.toggleOutlierSpikes = function () {
     isOutliersActive = !isOutliersActive;
     const btn = $("btn-inject-outliers");
     if (btn) btn.classList.toggle("btn-active", isOutliersActive);
+    syncOverlayVisibility();
     syncFaultsToBackend();
     addEvent(isOutliersActive ? "⚠️ Injecting rogue 55km GPS spikes into MAD Gate" : "GPS outlier injection stopped", isOutliersActive);
 };
@@ -963,6 +1001,7 @@ window.toggleNaiveGhost = function () {
     const txt = $("ghost-btn-text");
     if (btn) btn.classList.toggle("btn-active-subtle", showNaiveGhost);
     if (txt) txt.textContent = `Naive Ghost: ${showNaiveGhost ? "ON" : "OFF"}`;
+    syncOverlayVisibility();
     syncFaultsToBackend();
 };
 
@@ -975,6 +1014,7 @@ window.resetAllFaults = function () {
     delayedPosVisible = false;
     rejectedSpikeExpiresAt = 0;
     if (wasFaulted) recoveryFlashUntil = Date.now() + 2500;
+    syncOverlayVisibility();
 
     if ($("btn-sever-feed")) $("btn-sever-feed").classList.remove("btn-active");
     if ($("btn-inject-delay")) $("btn-inject-delay").classList.remove("btn-active");
@@ -1021,11 +1061,7 @@ if (selector) {
                     // Smoothly pivot Earth camera to look at the newly selected spacecraft's hemisphere
                     if (!followISS && payload.telemetry.position_geodetic) {
                         const g = payload.telemetry.position_geodetic;
-                        viewer.camera.flyTo({
-                            destination: Cesium.Cartesian3.fromDegrees(g.longitude, Math.max(-50, Math.min(50, g.latitude * 0.5)), 23500000),
-                            orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
-                            duration: 1.8
-                        });
+                        flyCameraToSpacecraft(g.longitude, g.latitude, 1.6);
                     }
                 }
             }
